@@ -241,12 +241,13 @@ class VideoService {
         });
 
         try {
-          // Create a combined image with all strips
+          // Create a combined image with all strips side by side
           const combinedImage = await this.combineStripImages(strips);
           
-          // Calculate combined dimensions
-          const maxWidth = Math.max(...strips.map(s => s.width));
-          const totalHeight = strips.reduce((sum, s) => sum + s.height, 0) + (strips.length - 1) * 20; // 20px gap between strips
+          // Calculate combined dimensions (horizontal layout)
+          const gap = 20;
+          const totalWidth = strips.reduce((sum, s) => sum + s.width, 0) + (strips.length - 1) * gap;
+          const maxHeight = Math.max(...strips.map(s => s.height));
 
           onProgress?.({
             currentStrip: 1,
@@ -266,9 +267,9 @@ class VideoService {
           const response = await this.generateVideo(
             combinedImage,
             undefined, // use default prompt for strict format
-            maxWidth,
-            totalHeight,
-            combinedContext || `Combined comic with ${strips.length} strips arranged vertically. Animate each strip's contents while keeping the overall layout frozen.`
+            totalWidth,
+            maxHeight,
+            combinedContext || `Combined comic with ${strips.length} strips arranged side by side. Animate each strip's contents while keeping the overall layout frozen.`
           );
 
           if (response.status === 'completed' && response.video_url) {
@@ -381,17 +382,17 @@ class VideoService {
   }
 
   /**
-   * Combine multiple strip images into a single vertically stacked image
+   * Combine multiple strip images into a single horizontally arranged image (side by side)
    */
   private async combineStripImages(strips: StripVideoInput[]): Promise<string> {
     return new Promise((resolve, reject) => {
-      const maxWidth = Math.max(...strips.map(s => s.width));
       const gap = 20; // Gap between strips
-      const totalHeight = strips.reduce((sum, s) => sum + s.height, 0) + (strips.length - 1) * gap;
+      const totalWidth = strips.reduce((sum, s) => sum + s.width, 0) + (strips.length - 1) * gap;
+      const maxHeight = Math.max(...strips.map(s => s.height));
 
       const canvas = document.createElement('canvas');
-      canvas.width = maxWidth;
-      canvas.height = totalHeight;
+      canvas.width = totalWidth;
+      canvas.height = maxHeight;
       const ctx = canvas.getContext('2d');
       
       if (!ctx) {
@@ -401,25 +402,25 @@ class VideoService {
 
       // Fill with white background
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, maxWidth, totalHeight);
+      ctx.fillRect(0, 0, totalWidth, maxHeight);
 
       let loadedCount = 0;
-      let currentY = 0;
-      const imagePositions: { y: number; height: number }[] = [];
+      let currentX = 0;
+      const imagePositions: { x: number; width: number }[] = [];
 
       // Calculate positions first
       strips.forEach((strip, i) => {
-        imagePositions.push({ y: currentY, height: strip.height });
-        currentY += strip.height + (i < strips.length - 1 ? gap : 0);
+        imagePositions.push({ x: currentX, width: strip.width });
+        currentX += strip.width + (i < strips.length - 1 ? gap : 0);
       });
 
       // Load and draw all images
       strips.forEach((strip, index) => {
         const img = new Image();
         img.onload = () => {
-          // Center the image horizontally if it's narrower than maxWidth
-          const x = (maxWidth - strip.width) / 2;
-          ctx.drawImage(img, x, imagePositions[index].y, strip.width, strip.height);
+          // Center the image vertically if it's shorter than maxHeight
+          const y = (maxHeight - strip.height) / 2;
+          ctx.drawImage(img, imagePositions[index].x, y, strip.width, strip.height);
           
           loadedCount++;
           if (loadedCount === strips.length) {
