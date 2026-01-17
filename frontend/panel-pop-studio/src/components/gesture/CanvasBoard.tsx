@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Point, DrawingConfig, ToolType } from '@/types';
+import { Point, DrawingConfig, ToolType, GestureType } from '@/types';
 
 interface CanvasBoardProps {
   cursor: Point;
-  isPinching: boolean;
+  gesture?: GestureType; // Gesture type for drawing/erasing control
   config: DrawingConfig;
   useMouseInput?: boolean;
   disableDrawing?: boolean;
@@ -21,7 +21,14 @@ export interface CanvasApi {
 // Keep the old interface for backward compatibility
 export interface CanvasRef extends CanvasApi { }
 
-export const CanvasBoard: React.FC<CanvasBoardProps> = ({ cursor, isPinching, config, useMouseInput = true, disableDrawing = false, onReady }) => {
+export const CanvasBoard: React.FC<CanvasBoardProps> = ({
+  cursor,
+  gesture = GestureType.NONE,
+  config,
+  useMouseInput = true,
+  disableDrawing = false,
+  onReady,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const lastPosRef = useRef<Point | null>(null);
@@ -171,7 +178,10 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ cursor, isPinching, co
     mouseLastPosRef.current = null;
   }, []);
 
-  // Gesture-based drawing (when pinching)
+  // Gesture-based drawing and erasing
+  // POINTER = draw with brush
+  // PINCH = draw with brush (selection drawing)
+  // CLOSED_FIST = erase at cursor position
   useEffect(() => {
     // Skip drawing if disabled (e.g., when dragging the sidebar)
     if (disableDrawing) {
@@ -184,14 +194,18 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ cursor, isPinching, co
     if (!ctx || !canvas) return;
 
     // Convert window-based cursor to canvas-relative coordinates
-    // (hand tracking returns window coordinates, but canvas may be offset by navigation bar)
     const rect = canvas.getBoundingClientRect();
     const canvasCursor = {
       x: cursor.x - rect.left,
       y: cursor.y - rect.top
     };
 
-    if (isPinching) {
+    // Determine what action to take based on gesture
+    const isDrawingGesture = gesture === GestureType.POINTER || gesture === GestureType.PINCH;
+    const isErasingGesture = gesture === GestureType.CLOSED_FIST;
+
+    if (isDrawingGesture) {
+    // Drawing mode - use current tool settings
       if (!lastPosRef.current) {
         ctx.beginPath();
         ctx.moveTo(canvasCursor.x, canvasCursor.y);
@@ -200,6 +214,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ cursor, isPinching, co
         ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
         ctx.lineTo(canvasCursor.x, canvasCursor.y);
 
+        // Use tool from config (can be brush or eraser from panel selection)
         if (config.tool === ToolType.ERASER) {
           ctx.globalCompositeOperation = 'source-over';
           ctx.strokeStyle = '#FFFFFF';
@@ -213,10 +228,26 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({ cursor, isPinching, co
         ctx.stroke();
       }
       lastPosRef.current = canvasCursor;
+    } else if (isErasingGesture) {
+      // Fist gesture = always erase, regardless of tool selection
+      if (!lastPosRef.current) {
+        ctx.beginPath();
+        ctx.moveTo(canvasCursor.x, canvasCursor.y);
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(lastPosRef.current.x, lastPosRef.current.y);
+        ctx.lineTo(canvasCursor.x, canvasCursor.y);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 40; // Slightly larger eraser for fist
+        ctx.stroke();
+      }
+      lastPosRef.current = canvasCursor;
     } else {
+      // No drawing gesture - reset last position
       lastPosRef.current = null;
     }
-  }, [cursor.x, cursor.y, isPinching, config, disableDrawing]);
+  }, [cursor.x, cursor.y, gesture, config, disableDrawing]);
 
   return (
     <canvas
