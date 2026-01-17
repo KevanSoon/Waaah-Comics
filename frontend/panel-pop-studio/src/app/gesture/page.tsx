@@ -485,8 +485,11 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
             <div 
               className="absolute border-2 border-green-500 bg-green-500/10 rounded pointer-events-none"
               style={{
-                // Mirror the box since video is mirrored (-scale-x-100)
-                left: `${(1 - gestureBox.x - gestureBox.width) * 100}%`,
+                // gestureBox uses cursor-normalized coords (inverted X for natural interaction)
+                // But video is mirrored, so we need to show the box in mirrored space
+                // The box x/width are in "cursor space" (0=left screen, 1=right screen)
+                // In mirrored video: left side of video = right side of physical space
+                left: `${gestureBox.x * 100}%`,
                 top: `${gestureBox.y * 100}%`,
                 width: `${gestureBox.width * 100}%`,
                 height: `${gestureBox.height * 100}%`,
@@ -502,8 +505,10 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
             <div 
               className="absolute w-3 h-3 bg-red-500 rounded-full border-2 border-white pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
               style={{
-                // Mirror the position since video is mirrored
-                left: `${(1 - rawHandPosition.x) * 100}%`,
+                // rawHandPosition.x is raw MediaPipe coords (0=left of sensor, 1=right)
+                // Video element uses -scale-x-100 which mirrors it visually
+                // So we use rawHandPosition.x directly - the CSS mirror handles the flip
+                left: `${rawHandPosition.x * 100}%`,
                 top: `${rawHandPosition.y * 100}%`,
               }}
             />
@@ -517,7 +522,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
         gesture={gesture}
         config={drawingConfig}
         useMouseInput={true}
-        disableDrawing={isSidebarDragging}
+        disableGestureDrawing={isSidebarDragging}
         onReady={handleCanvasReady}
       />
 

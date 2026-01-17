@@ -8,7 +8,7 @@ interface CanvasBoardProps {
   gesture?: GestureType; // Gesture type for drawing/erasing control
   config: DrawingConfig;
   useMouseInput?: boolean;
-  disableDrawing?: boolean;
+  disableGestureDrawing?: boolean; // Only disables gesture-based drawing, not mouse
   onReady?: (api: CanvasApi) => void;
 }
 
@@ -26,7 +26,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({
   gesture = GestureType.NONE,
   config,
   useMouseInput = true,
-  disableDrawing = false,
+  disableGestureDrawing = false,
   onReady,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -135,13 +135,13 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({
   }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!useMouseInput || disableDrawing) return;
+    if (!useMouseInput) return;
     setIsMouseDrawing(true);
     mouseLastPosRef.current = getCanvasCoords(e);
-  }, [useMouseInput, disableDrawing, getCanvasCoords]);
+  }, [useMouseInput, getCanvasCoords]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!useMouseInput || !isMouseDrawing || disableDrawing) return;
+    if (!useMouseInput || !isMouseDrawing) return;
     const ctx = contextRef.current;
     if (!ctx) return;
 
@@ -166,7 +166,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({
     }
 
     mouseLastPosRef.current = currentPos;
-  }, [useMouseInput, isMouseDrawing, config, disableDrawing, getCanvasCoords]);
+  }, [useMouseInput, isMouseDrawing, config, getCanvasCoords]);
 
   const handleMouseUp = useCallback(() => {
     setIsMouseDrawing(false);
@@ -183,8 +183,9 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({
   // PINCH = draw with brush (selection drawing)
   // CLOSED_FIST = erase at cursor position
   useEffect(() => {
-    // Skip drawing if disabled (e.g., when dragging the sidebar)
-    if (disableDrawing) {
+    // Skip gesture drawing if disabled (e.g., when dragging the sidebar)
+    // NOTE: This only affects gesture input, NOT mouse input
+    if (disableGestureDrawing) {
       lastPosRef.current = null;
       return;
     }
@@ -247,7 +248,7 @@ export const CanvasBoard: React.FC<CanvasBoardProps> = ({
       // No drawing gesture - reset last position
       lastPosRef.current = null;
     }
-  }, [cursor.x, cursor.y, gesture, config, disableDrawing]);
+  }, [cursor.x, cursor.y, gesture, config, disableGestureDrawing]);
 
   return (
     <canvas

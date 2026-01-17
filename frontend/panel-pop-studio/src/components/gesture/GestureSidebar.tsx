@@ -79,10 +79,10 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const dragHandleRef = useRef<HTMLDivElement>(null);
 
-  // Track if cursor is over the panel
+  // Track if gesture cursor is over the panel (for gesture drawing disable only)
   const [isCursorOverPanel, setIsCursorOverPanel] = useState(false);
 
-  // Check if cursor is over the sidebar panel
+  // Check if gesture cursor is over the sidebar panel
   useEffect(() => {
     if (!sidebarRef.current) return;
     const rect = sidebarRef.current.getBoundingClientRect();
@@ -94,12 +94,14 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     setIsCursorOverPanel(isOver);
   }, [cursor.x, cursor.y]);
 
-  // Notify parent when drag state changes OR cursor is over panel
+  // Notify parent when drag state changes
+  // NOTE: Only report actual dragging state, NOT cursor-over-panel
+  // This prevents mouse input from being disabled when gesture cursor hovers panel
   useEffect(() => {
     if (onDragStateChange) {
-      onDragStateChange(isDragging || isGestureDragging || isCursorOverPanel);
+      onDragStateChange(isDragging || isGestureDragging);
     }
-  }, [isDragging, isGestureDragging, isCursorOverPanel, onDragStateChange]);
+  }, [isDragging, isGestureDragging, onDragStateChange]);
 
   // Initialize default position on mount
   useEffect(() => {

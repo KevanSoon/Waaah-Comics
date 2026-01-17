@@ -162,16 +162,20 @@ export const useHandTracking = (gestureBox: GestureBox = DEFAULT_GESTURE_BOX) =>
       const middleMCP = landmarks[9]; // For hand scale normalization
 
       // Raw normalized hand position (0-1) - used for gesture box visualization
-      // Note: indexTip.x is mirrored (0 = right side of camera, 1 = left side)
-      const rawNormalizedX = 1 - indexTip.x; // Un-mirror for consistent coordinates
+      // Store the raw MediaPipe coordinates (0 = left of camera sensor, 1 = right)
+      // The UI will handle mirroring for display since video uses -scale-x-100
+      const rawNormalizedX = indexTip.x; // Raw position for visualization (UI mirrors it)
       const rawNormalizedY = indexTip.y;
+
+      // For cursor mapping, we need to invert X since camera is mirrored for natural interaction
+      const cursorNormalizedX = 1 - indexTip.x;
 
       // Map hand position within gesture box to full screen
       // If hand is within the gesture box, map that region to the full canvas
       const box = gestureBoxRef.current;
       
       // Clamp and map the position within the gesture box to 0-1 range
-      const mappedX = Math.max(0, Math.min(1, (rawNormalizedX - box.x) / box.width));
+      const mappedX = Math.max(0, Math.min(1, (cursorNormalizedX - box.x) / box.width));
       const mappedY = Math.max(0, Math.min(1, (rawNormalizedY - box.y) / box.height));
       
       // Convert to screen coordinates
