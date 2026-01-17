@@ -857,17 +857,6 @@ function ComicStudioContent() {
               <RotateCcw className="w-4 h-4" />
               <span className="hidden sm:inline">Reset</span>
             </button>
-            <button
-              onClick={handleSaveComic}
-              disabled={isSaving}
-              className="p-2 text-slate-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium disabled:opacity-50"
-              title="Save Comic"
-            >
-              <Save className="w-4 h-4" />
-              <span className="hidden sm:inline">{isSaving ? 'Saving...' : (currentComicId ? 'Update' : 'Save')}</span>
-            </button>
-            <div className="h-6 w-px bg-slate-200 mx-2"></div>
-
             {/* Project Dropdown */}
             <div className="relative">
               <button
@@ -934,16 +923,6 @@ function ComicStudioContent() {
               )}
             </div>
 
-            <button
-              onClick={handleOpenVideoContext}
-              disabled={isExporting || isGeneratingVideo || Object.keys(images).length === 0}
-              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-purple-400 disabled:to-pink-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform active:scale-95 duration-100"
-              title="Generate Video with AI"
-            >
-              <Video className="w-4 h-4" />
-              <Sparkles className="w-3 h-3" />
-              <span className="hidden sm:inline">Animate</span>
-            </button>
             <button
               onClick={handleOpenMultiStripModal}
               className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform active:scale-95 duration-100 relative"
