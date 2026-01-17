@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Trash2, RefreshCw, Image, LayoutGrid, Edit2, Check, X } from 'lucide-react';
+import { ArrowLeft, Trash2, RefreshCw, Image, LayoutGrid, Edit2, Check, X, Video, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedRoute from '@/components/shared/ProtectedRoute';
 import { useAuth } from '@clerk/nextjs';
-import { apiService, Project, ProjectPanel } from '@/services/apiService';
+import { apiService, Project, ProjectPanel, ProjectVideo } from '@/services/apiService';
+
+type TabType = 'panels' | 'videos';
 
 export default function ProjectDetailPage() {
   return (
@@ -28,6 +30,8 @@ function ProjectDetailContent() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>('panels');
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
 
   // Initialize API service with auth token
   useEffect(() => {
@@ -94,6 +98,30 @@ function ProjectDetailContent() {
     } catch (err) {
       console.error('Failed to delete panel:', err);
       alert('Failed to delete panel. Please try again.');
+    }
+  };
+
+  const handleDeleteVideo = async (videoId: string) => {
+    if (!userId || !project) return;
+    if (!window.confirm('Are you sure you want to delete this video?')) {
+      return;
+    }
+
+    try {
+      await apiService.deleteVideoFromProject(project.id, videoId, userId);
+      setProject(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          videos: prev.videos.filter(v => v.id !== videoId),
+        };
+      });
+      if (playingVideoId === videoId) {
+        setPlayingVideoId(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete video:', err);
+      alert('Failed to delete video. Please try again.');
     }
   };
 
@@ -235,64 +263,155 @@ function ProjectDetailContent() {
             </div>
           )}
 
-          <div className="flex items-center gap-2 mt-2 ml-14 text-sm text-gray-500">
-            <Image className="w-4 h-4" />
-            <span>{project.panels.length} panels</span>
+          <div className="flex items-center gap-4 mt-2 ml-14 text-sm text-gray-500">
+            <div className="flex items-center gap-2">
+              <Image className="w-4 h-4" />
+              <span>{project.panels.length} panels</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Video className="w-4 h-4" />
+              <span>{project.videos?.length || 0} videos</span>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 mt-4 ml-14">
+            <button
+              onClick={() => setActiveTab('panels')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'panels'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Image className="w-4 h-4" />
+              Panels
+            </button>
+            <button
+              onClick={() => setActiveTab('videos')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === 'videos'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700'
+              }`}
+            >
+              <Video className="w-4 h-4" />
+              Videos
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Panels - Vertical scroll layout */}
+      {/* Content based on active tab */}
       <div className="max-w-4xl mx-auto px-6 py-8">
-        {project.panels.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Image className="w-10 h-10 text-gray-600" />
+        {activeTab === 'panels' ? (
+          /* Panels Tab */
+          project.panels.length === 0 ? (
+            <div className="text-center py-20">
+              <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Image className="w-10 h-10 text-gray-600" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-300 mb-2">No panels yet</h2>
+              <p className="text-gray-500 mb-6">
+                Go to Comic Studio and upload panels to this project.
+              </p>
+              <Link
+                href="/comic"
+                className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mx-auto w-fit"
+              >
+                <LayoutGrid className="w-5 h-5" />
+                Open Comic Studio
+              </Link>
             </div>
-            <h2 className="text-xl font-semibold text-gray-300 mb-2">No panels yet</h2>
-            <p className="text-gray-500 mb-6">
-              Go to Comic Studio and upload panels to this project.
-            </p>
-            <Link
-              href="/comic"
-              className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mx-auto w-fit"
-            >
-              <LayoutGrid className="w-5 h-5" />
-              Open Comic Studio
-            </Link>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {project.panels
-              .sort((a, b) => a.panel_order - b.panel_order)
-              .map((panel, index) => (
-                <div
-                  key={panel.id}
-                  className="group relative bg-gray-800 rounded-xl overflow-hidden border border-gray-700"
-                >
-                  {/* Panel number indicator */}
-                  <div className="absolute top-4 left-4 z-10 px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-sm font-medium text-white">
-                    Panel {index + 1}
-                  </div>
-
-                  {/* Delete button */}
-                  <button
-                    onClick={() => handleDeletePanel(panel.id)}
-                    className="absolute top-4 right-4 z-10 p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                    title="Delete panel"
+          ) : (
+            <div className="space-y-6">
+              {project.panels
+                .sort((a, b) => a.panel_order - b.panel_order)
+                .map((panel, index) => (
+                  <div
+                    key={panel.id}
+                    className="group relative bg-gray-800 rounded-xl overflow-hidden border border-gray-700"
                   >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                    {/* Panel number indicator */}
+                    <div className="absolute top-4 left-4 z-10 px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-sm font-medium text-white">
+                      Panel {index + 1}
+                    </div>
 
-                  {/* Panel image */}
-                  <img
-                    src={panel.image_url}
-                    alt={`Panel ${index + 1}`}
-                    className="w-full h-auto"
-                  />
-                </div>
-              ))}
-          </div>
+                    {/* Delete button */}
+                    <button
+                      onClick={() => handleDeletePanel(panel.id)}
+                      className="absolute top-4 right-4 z-10 p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete panel"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    {/* Panel image */}
+                    <img
+                      src={panel.image_url}
+                      alt={`Panel ${index + 1}`}
+                      className="w-full h-auto"
+                    />
+                  </div>
+                ))}
+            </div>
+          )
+        ) : (
+          /* Videos Tab */
+          (!project.videos || project.videos.length === 0) ? (
+            <div className="text-center py-20">
+              <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Video className="w-10 h-10 text-gray-600" />
+              </div>
+              <h2 className="text-xl font-semibold text-gray-300 mb-2">No videos yet</h2>
+              <p className="text-gray-500 mb-6">
+                Generate animations in Comic Studio and save them to this project.
+              </p>
+              <Link
+                href="/comic"
+                className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mx-auto w-fit"
+              >
+                <LayoutGrid className="w-5 h-5" />
+                Open Comic Studio
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {project.videos
+                .sort((a, b) => a.video_order - b.video_order)
+                .map((video, index) => (
+                  <div
+                    key={video.id}
+                    className="group relative bg-gray-800 rounded-xl overflow-hidden border border-gray-700"
+                  >
+                    {/* Video number/name indicator */}
+                    <div className="absolute top-4 left-4 z-10 px-3 py-1 bg-black/50 backdrop-blur-sm rounded-full text-sm font-medium text-white">
+                      {video.name || `Video ${index + 1}`}
+                    </div>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={() => handleDeleteVideo(video.id)}
+                      className="absolute top-4 right-4 z-10 p-2 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                      title="Delete video"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+
+                    {/* Video player */}
+                    <div className="relative">
+                      <video
+                        src={video.video_url}
+                        controls
+                        loop
+                        className="w-full h-auto"
+                        poster=""
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )
         )}
       </div>
     </div>

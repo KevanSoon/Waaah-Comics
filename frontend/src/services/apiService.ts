@@ -64,6 +64,15 @@ export interface ProjectPanel {
   created_at?: string;
 }
 
+export interface ProjectVideo {
+  id: string;
+  project_id: string;
+  video_url: string;
+  video_order: number;
+  name?: string;
+  created_at?: string;
+}
+
 export interface Project {
   id: string;
   user_id: string;
@@ -73,6 +82,7 @@ export interface Project {
   created_at?: string;
   updated_at?: string;
   panels: ProjectPanel[];
+  videos: ProjectVideo[];
 }
 
 export interface CreateProjectRequest {
@@ -90,6 +100,12 @@ export interface UpdateProjectRequest {
 export interface AddPanelRequest {
   image_url: string;
   panel_order?: number;
+}
+
+export interface AddVideoRequest {
+  video_url: string;
+  video_order?: number;
+  name?: string;
 }
 
 // API Service class
@@ -304,6 +320,17 @@ class ApiService {
 
   async deletePanelFromProject(projectId: string, panelId: string, userId: string): Promise<void> {
     return this.request(`/projects/${projectId}/panels/${panelId}?user_id=${userId}`, { method: 'DELETE' });
+  }
+
+  async addVideoToProject(projectId: string, userId: string, data: AddVideoRequest): Promise<ProjectVideo> {
+    return this.request(`/projects/${projectId}/videos?user_id=${userId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteVideoFromProject(projectId: string, videoId: string, userId: string): Promise<void> {
+    return this.request(`/projects/${projectId}/videos/${videoId}?user_id=${userId}`, { method: 'DELETE' });
   }
 }
 

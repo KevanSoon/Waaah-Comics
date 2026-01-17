@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   Download, 
@@ -17,10 +17,13 @@ import {
   Layers,
   ChevronUp,
   ChevronDown,
-  Pencil
+  Pencil,
+  FolderPlus
 } from 'lucide-react';
 import { ComicStrip, MultiStripVideoProgress } from '@/types';
 import { saveVideoToStorage } from '@/services/videoService';
+import { useProjects } from '@/context/ProjectsContext';
+import { apiService } from '@/services/apiService';
 
 interface MultiStripVideoModalProps {
   isOpen: boolean;
@@ -57,12 +60,20 @@ export function MultiStripVideoModal({
   userId,
   hasCurrentStripImages,
 }: MultiStripVideoModalProps) {
+  const { projects, refreshProjects } = useProjects();
   const [activeTab, setActiveTab] = useState<'strips' | 'preview'>('strips');
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [selectedVideoIndex, setSelectedVideoIndex] = useState(0);
+  
+  // Save to project state
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [isSavingToProject, setIsSavingToProject] = useState(false);
+  const [saveToProjectSuccess, setSaveToProjectSuccess] = useState<string | null>(null);
+  const [saveToProjectError, setSaveToProjectError] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [editingStripId, setEditingStripId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editContext, setEditContext] = useState('');
@@ -73,6 +84,26 @@ export function MultiStripVideoModal({
       setActiveTab('preview');
     }
   }, [combinedVideoUrl, stripVideos]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowProjectDropdown(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Refresh projects when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      refreshProjects();
+      setSaveToProjectSuccess(null);
+      setSaveToProjectError(null);
+    }
+  }, [isOpen, refreshProjects]);
 
   if (!isOpen) return null;
 
@@ -142,6 +173,28 @@ export function MultiStripVideoModal({
       setSaveError(err instanceof Error ? err.message : 'Failed to save video');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveToProject = async (videoUrl: string, projectId: string, projectName: string) => {
+    if (!videoUrl || !userId) return;
+
+    setIsSavingToProject(true);
+    setSaveToProjectError(null);
+    setSaveToProjectSuccess(null);
+    setShowProjectDropdown(false);
+
+    try {
+      await apiService.addVideoToProject(projectId, userId, {
+        video_url: videoUrl,
+        name: `Multi-Strip Video - ${new Date().toLocaleDateString()}`,
+      });
+      setSaveToProjectSuccess(projectName);
+    } catch (err) {
+      console.error('Save to project failed:', err);
+      setSaveToProjectError(err instanceof Error ? err.message : 'Failed to save to project');
+    } finally {
+      setIsSavingToProject(false);
     }
   };
 
@@ -509,6 +562,19 @@ export function MultiStripVideoModal({
                     </div>
                   )}
 
+                  {saveToProjectError && (
+                    <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                      {saveToProjectError}
+                    </div>
+                  )}
+
+                  {saveToProjectSuccess && (
+                    <div className="p-3 bg-green-500/20 border border-green-500/50 rounded-lg text-green-400 text-sm flex items-center gap-2">
+                      <Check className="w-4 h-4" />
+                      Saved to project "{saveToProjectSuccess}"
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="flex flex-wrap gap-3">
                     {/* Download Current Video */}
@@ -540,6 +606,49 @@ export function MultiStripVideoModal({
                         Download All ({stripVideos.length})
                       </button>
                     )}
+
+                    {/* Save to Project Dropdown */}
+                    <div className="relative" ref={dropdownRef}>
+                      <button
+                        onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                        disabled={isSavingToProject || !userId}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white rounded-lg font-medium flex items-center gap-2 transition-colors"
+                      >
+                        {isSavingToProject ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <FolderPlus className="w-4 h-4" />
+                        )}
+                        Save to Project
+                        <ChevronDown className={`w-4 h-4 transition-transform ${showProjectDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {showProjectDropdown && (
+                        <div className="absolute left-0 bottom-full mb-2 w-64 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 overflow-hidden">
+                          <div className="p-2 border-b border-slate-700">
+                            <p className="text-xs text-slate-400 font-medium">Select a project</p>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto">
+                            {projects.length === 0 ? (
+                              <div className="p-4 text-center text-slate-400 text-sm">
+                                No projects yet. Create one in the Projects page.
+                              </div>
+                            ) : (
+                              projects.map((project) => (
+                                <button
+                                  key={project.id}
+                                  onClick={() => handleSaveToProject(currentVideoUrl, project.id, project.name)}
+                                  className="w-full px-4 py-2 text-left text-white hover:bg-slate-700 transition-colors flex items-center gap-2"
+                                >
+                                  <FolderPlus className="w-4 h-4 text-indigo-400" />
+                                  <span className="truncate">{project.name}</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Save to Cloud */}
                     <button

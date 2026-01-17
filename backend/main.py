@@ -73,6 +73,21 @@ class ProjectPanelItem(BaseModel):
     created_at: Optional[datetime] = None
 
 
+class ProjectVideoItem(BaseModel):
+    id: str
+    project_id: str
+    video_url: str
+    video_order: int
+    name: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class AddVideoRequest(BaseModel):
+    video_url: str
+    video_order: Optional[int] = None
+    name: Optional[str] = None
+
+
 class ProjectItem(BaseModel):
     id: str
     user_id: str
@@ -82,6 +97,7 @@ class ProjectItem(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     panels: List[ProjectPanelItem] = []
+    videos: List[ProjectVideoItem] = []
 
 
 class AddPanelRequest(BaseModel):
@@ -501,6 +517,21 @@ def list_projects(user_id: str):
                 for p in (panels_result.data or [])
             ]
 
+            # Get videos for each project
+            videos_result = supabase.table("project_videos").select("*").eq("project_id", proj["id"]).order("video_order").execute()
+
+            videos = [
+                ProjectVideoItem(
+                    id=v["id"],
+                    project_id=v["project_id"],
+                    video_url=v["video_url"],
+                    video_order=v["video_order"],
+                    name=v.get("name"),
+                    created_at=v.get("created_at"),
+                )
+                for v in (videos_result.data or [])
+            ]
+
             projects.append(ProjectItem(
                 id=proj["id"],
                 user_id=proj["user_id"],
@@ -510,6 +541,7 @@ def list_projects(user_id: str):
                 created_at=proj.get("created_at"),
                 updated_at=proj.get("updated_at"),
                 panels=panels,
+                videos=videos,
             ))
 
         return projects
@@ -545,6 +577,7 @@ def create_project(data: ProjectCreate, user_id: str):
             created_at=proj.get("created_at"),
             updated_at=proj.get("updated_at"),
             panels=[],
+            videos=[],
         )
     except HTTPException:
         raise
@@ -579,6 +612,21 @@ def get_project(project_id: str, user_id: str):
             for p in (panels_result.data or [])
         ]
 
+        # Get videos
+        videos_result = supabase.table("project_videos").select("*").eq("project_id", project_id).order("video_order").execute()
+
+        videos = [
+            ProjectVideoItem(
+                id=v["id"],
+                project_id=v["project_id"],
+                video_url=v["video_url"],
+                video_order=v["video_order"],
+                name=v.get("name"),
+                created_at=v.get("created_at"),
+            )
+            for v in (videos_result.data or [])
+        ]
+
         return ProjectItem(
             id=proj["id"],
             user_id=proj["user_id"],
@@ -588,6 +636,7 @@ def get_project(project_id: str, user_id: str):
             created_at=proj.get("created_at"),
             updated_at=proj.get("updated_at"),
             panels=panels,
+            videos=videos,
         )
     except HTTPException:
         raise
@@ -636,6 +685,21 @@ def update_project(project_id: str, data: ProjectUpdate, user_id: str):
             for p in (panels_result.data or [])
         ]
 
+        # Get videos
+        videos_result = supabase.table("project_videos").select("*").eq("project_id", project_id).order("video_order").execute()
+
+        videos = [
+            ProjectVideoItem(
+                id=v["id"],
+                project_id=v["project_id"],
+                video_url=v["video_url"],
+                video_order=v["video_order"],
+                name=v.get("name"),
+                created_at=v.get("created_at"),
+            )
+            for v in (videos_result.data or [])
+        ]
+
         return ProjectItem(
             id=proj["id"],
             user_id=proj["user_id"],
@@ -645,6 +709,7 @@ def update_project(project_id: str, data: ProjectUpdate, user_id: str):
             created_at=proj.get("created_at"),
             updated_at=proj.get("updated_at"),
             panels=panels,
+            videos=videos,
         )
     except HTTPException:
         raise
@@ -741,6 +806,73 @@ def delete_panel_from_project(project_id: str, panel_id: str, user_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete panel: {e}")
+
+
+@app.post("/projects/{project_id}/videos", response_model=ProjectVideoItem)
+def add_video_to_project(project_id: str, data: AddVideoRequest, user_id: str):
+    """Add a video to a project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify project ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Get max order if not specified
+        video_order = data.video_order
+        if video_order is None:
+            max_order_result = supabase.table("project_videos").select("video_order").eq("project_id", project_id).order("video_order", desc=True).limit(1).execute()
+            if max_order_result.data and len(max_order_result.data) > 0:
+                video_order = max_order_result.data[0]["video_order"] + 1
+            else:
+                video_order = 0
+
+        result = supabase.table("project_videos").insert({
+            "project_id": project_id,
+            "video_url": data.video_url,
+            "video_order": video_order,
+            "name": data.name,
+        }).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to add video")
+
+        v = result.data[0]
+
+        return ProjectVideoItem(
+            id=v["id"],
+            project_id=v["project_id"],
+            video_url=v["video_url"],
+            video_order=v["video_order"],
+            name=v.get("name"),
+            created_at=v.get("created_at"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add video: {e}")
+
+
+@app.delete("/projects/{project_id}/videos/{video_id}")
+def delete_video_from_project(project_id: str, video_id: str, user_id: str):
+    """Delete a video from a project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify project ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Delete video
+        supabase.table("project_videos").delete().eq("id", video_id).eq("project_id", project_id).execute()
+
+        return {"status": "deleted", "video_id": video_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete video: {e}")
 
 
 @app.get("/health")

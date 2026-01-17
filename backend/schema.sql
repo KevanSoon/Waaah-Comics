@@ -77,6 +77,17 @@ CREATE TABLE IF NOT EXISTS project_panels (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Project videos table (generated videos belonging to a project)
+CREATE TABLE IF NOT EXISTS project_videos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    video_url TEXT NOT NULL,
+    video_order INTEGER NOT NULL DEFAULT 0,
+    name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id);
 CREATE INDEX IF NOT EXISTS idx_comics_user_id ON comics(user_id);
@@ -86,6 +97,8 @@ CREATE INDEX IF NOT EXISTS idx_videos_comic_id ON videos(comic_id);
 CREATE INDEX IF NOT EXISTS idx_projects_user_id ON projects(user_id);
 CREATE INDEX IF NOT EXISTS idx_project_panels_project_id ON project_panels(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_panels_order ON project_panels(project_id, panel_order);
+CREATE INDEX IF NOT EXISTS idx_project_videos_project_id ON project_videos(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_videos_order ON project_videos(project_id, video_order);
 
 -- Row Level Security (RLS) policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -95,6 +108,7 @@ ALTER TABLE generated_images ENABLE ROW LEVEL SECURITY;
 ALTER TABLE videos ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE project_panels ENABLE ROW LEVEL SECURITY;
+ALTER TABLE project_videos ENABLE ROW LEVEL SECURITY;
 
 -- For service role access (backend uses service key, so it bypasses RLS)
 -- If you want to add client-side access later, you'll need to add policies
@@ -107,3 +121,4 @@ GRANT ALL ON generated_images TO service_role;
 GRANT ALL ON videos TO service_role;
 GRANT ALL ON projects TO service_role;
 GRANT ALL ON project_panels TO service_role;
+GRANT ALL ON project_videos TO service_role;
