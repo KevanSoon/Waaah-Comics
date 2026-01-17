@@ -95,11 +95,20 @@ class VideoService {
         ${contextSection}CRITICAL: Do NOT generate new images or frames. Do NOT create transitions.
         
         This is a static comic page layout that must NEVER change:
-        - The page layout is FROZEN
+        - The page layout is FROZEN and must stay EXACTLY in place
         - Panel borders are FROZEN  
         - Panel positions are FROZEN
         - White/colored gutters between panels are FROZEN
         - All text is FROZEN
+        - The entire frame/canvas boundary is LOCKED - no shifting, panning, or repositioning
+        
+        IMPORTANT - NO TRANSITIONS:
+        - Do NOT add any transitions, fades, or wipes between sections
+        - Do NOT animate the frame or canvas itself
+        - Do NOT pan, zoom, or shift the view
+        - The image position must remain perfectly stationary throughout
+        - Even if there are multiple comic strips of different sizes, treat them as ONE static image
+        - Each comic strip section must stay in its exact position - no sliding or moving
         
         ONLY add subtle motion to the EXISTING artwork inside each panel:
         - Gentle character breathing
@@ -110,16 +119,18 @@ class VideoService {
         
         DO NOT:
         - Generate any new content
-        - Create transitions between scenes
+        - Create transitions between scenes or strips
         - Morph or transform the image
         - Move the camera in any way
         - Change the composition
         - Add new characters or objects
         - Zoom into individual panels
+        - Slide, pan, or reposition any part of the image
+        - Add motion to the frame boundaries
         
         This is a cinemagraph of a comic page - the structure stays perfectly still, only tiny movements within the drawn art.
         
-        Seamless loop. Entire image visible. No cuts.
+        Seamless loop. Entire image visible at all times. No cuts. No transitions. Static frame position.
       `;
 
       console.log('[VideoService] Starting video generation...');
