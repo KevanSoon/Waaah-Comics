@@ -55,6 +55,43 @@ export interface StorageAssetList {
   items: StorageAssetItem[];
 }
 
+// Project types
+export interface ProjectPanel {
+  id: string;
+  project_id: string;
+  image_url: string;
+  panel_order: number;
+  created_at?: string;
+}
+
+export interface Project {
+  id: string;
+  user_id: string;
+  name: string;
+  description?: string;
+  cover_image_url?: string;
+  created_at?: string;
+  updated_at?: string;
+  panels: ProjectPanel[];
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  description?: string;
+  cover_image_url?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  description?: string;
+  cover_image_url?: string;
+}
+
+export interface AddPanelRequest {
+  image_url: string;
+  panel_order?: number;
+}
+
 // API Service class
 class ApiService {
   private getAuthHeader: (() => Promise<string | null>) | null = null;
@@ -197,6 +234,44 @@ class ApiService {
   async listUserStorageVideos(userId: string, signed = false, limit = 100, offset = 0): Promise<StorageAssetList> {
     const params = new URLSearchParams({ user_id: userId, signed: String(signed), limit: String(limit), offset: String(offset) });
     return this.request(`/assets/user-videos?${params.toString()}`);
+  }
+
+  // Project endpoints
+  async listProjects(userId: string): Promise<Project[]> {
+    return this.request(`/projects?user_id=${userId}`);
+  }
+
+  async createProject(userId: string, data: CreateProjectRequest): Promise<Project> {
+    return this.request(`/projects?user_id=${userId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getProject(projectId: string, userId: string): Promise<Project> {
+    return this.request(`/projects/${projectId}?user_id=${userId}`);
+  }
+
+  async updateProject(projectId: string, userId: string, data: UpdateProjectRequest): Promise<Project> {
+    return this.request(`/projects/${projectId}?user_id=${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteProject(projectId: string, userId: string): Promise<void> {
+    return this.request(`/projects/${projectId}?user_id=${userId}`, { method: 'DELETE' });
+  }
+
+  async addPanelToProject(projectId: string, userId: string, data: AddPanelRequest): Promise<ProjectPanel> {
+    return this.request(`/projects/${projectId}/panels?user_id=${userId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePanelFromProject(projectId: string, panelId: string, userId: string): Promise<void> {
+    return this.request(`/projects/${projectId}/panels/${panelId}?user_id=${userId}`, { method: 'DELETE' });
   }
 }
 
