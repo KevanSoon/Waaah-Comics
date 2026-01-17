@@ -112,6 +112,11 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Resizable camera preview state
+  const [cameraSize, setCameraSize] = useState({ width: 192, height: 144 }); // 4:3 aspect ratio, default w-48 = 192px
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
   const notify = (msg: string) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3000);
@@ -233,10 +238,16 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
   const handleToggleFullscreen = useCallback(async () => {
     if (!document.fullscreenElement) {
       try {
-        await containerRef.current?.requestFullscreen();
+        if (!containerRef.current) {
+          notify("Fullscreen unavailable");
+          return;
+        }
+        await containerRef.current.requestFullscreen();
         setIsFullscreen(true);
       } catch (err) {
-        notify("Fullscreen not supported");
+        // Fullscreen requires trusted user gesture - gesture dwell may not qualify
+        // Silently fail for programmatic triggers, only notify if it seems like a real failure
+        console.log("Fullscreen request denied - may require direct click");
       }
     } else {
       await document.exitFullscreen();
@@ -252,6 +263,44 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
+
+  // Camera resize handlers
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizing(true);
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: cameraSize.width,
+      height: cameraSize.height
+    };
+  }, [cameraSize]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaX = e.clientX - resizeStartRef.current.x;
+      const deltaY = e.clientY - resizeStartRef.current.y;
+      // Use the larger delta to maintain aspect ratio
+      const delta = Math.max(deltaX, deltaY);
+      const newWidth = Math.max(120, Math.min(400, resizeStartRef.current.width + delta));
+      const newHeight = newWidth * 0.75; // 4:3 aspect ratio
+      setCameraSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   // Handle keyboard shortcuts
   useEffect(() => {
@@ -470,12 +519,16 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
 
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-white selection:bg-none">
-      {/* Camera feed with gesture box overlay - positioned below navbar */}
-      <div className={`absolute top-2 left-4 w-48 z-10 transition-opacity ${isCameraEnabled ? 'opacity-90' : 'opacity-0'}`}>
-        <div className="relative">
+      {/* Camera feed with gesture box overlay - positioned below navbar, resizable */}
+      <div 
+        className={`absolute top-2 left-4 z-10 transition-opacity ${isCameraEnabled ? 'opacity-90' : 'opacity-0'}`}
+        style={{ width: cameraSize.width }}
+      >
+        <div className="relative rounded-lg overflow-hidden border-2 border-gray-300 bg-black">
           <video
             ref={videoRef}
-            className="w-full rounded-lg border-2 border-gray-300 pointer-events-none -scale-x-100"
+            className="w-full pointer-events-none -scale-x-100"
+            style={{ height: cameraSize.height }}
             autoPlay
             muted
             playsInline
@@ -513,6 +566,15 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
               }}
             />
           )}
+          {/* Resize handle - bottom right corner */}
+          <div
+            onMouseDown={handleResizeStart}
+            className={`absolute bottom-0 right-0 w-4 h-4 cursor-se-resize bg-gray-400/60 hover:bg-gray-500/80 transition-colors ${isResizing ? 'bg-blue-500/80' : ''}`}
+            style={{
+              clipPath: 'polygon(100% 0%, 100% 100%, 0% 100%)',
+            }}
+            title="Drag to resize"
+          />
         </div>
         <p className="text-xs text-gray-500 text-center mt-1">Keep hand in green zone</p>
       </div>
@@ -541,7 +603,6 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
         isCameraEnabled={isCameraEnabled}
         onToggleFullscreen={handleToggleFullscreen}
         isFullscreen={isFullscreen}
-        onSaveDrawing={handleSaveDrawing}
       />
 
       <Cursor position={cursor} isPinching={isPinching} gesture={gesture} />
