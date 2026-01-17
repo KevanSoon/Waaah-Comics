@@ -7,8 +7,10 @@ import { apiService } from '@/services/apiService';
 
 interface AssetContextType {
   assets: Asset[];
+  imageAssets: Asset[];
+  videoAssets: Asset[];
   isLoading: boolean;
-  addAsset: (url: string, name: string, source: Asset['source']) => Promise<void>;
+  addAsset: (url: string, name: string, source: Asset['source'], type?: Asset['type']) => Promise<void>;
   removeAsset: (id: string) => Promise<void>;
   clearAssets: () => void;
   refreshAssets: () => Promise<void>;
@@ -17,7 +19,7 @@ interface AssetContextType {
 const AssetContext = createContext<AssetContextType | undefined>(undefined);
 
 export function AssetProvider({ children }: { children: ReactNode }) {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -28,31 +30,53 @@ export function AssetProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoaded, getToken]);
 
-  // Fetch user assets when signed in
+  // Fetch user assets when signed in - from Supabase storage
   const refreshAssets = useCallback(async () => {
-    if (!isSignedIn) {
+    if (!isSignedIn || !userId) {
       setAssets([]);
       return;
     }
 
     setIsLoading(true);
     try {
-      const images = await apiService.getUserImages();
-      const mappedAssets: Asset[] = images.map((img) => ({
-        id: img.id,
-        url: img.image_url,
-        name: img.prompt || `Image ${img.id.slice(0, 8)}`,
-        createdAt: new Date(img.created_at),
-        source: (img.source_type === 'sketch' ? 'gesture' : 
-                 img.source_type === 'comic' ? 'comic' : 'upload') as Asset['source'],
+      // Fetch both images and videos from Supabase storage in parallel
+      const [imagesResponse, videosResponse] = await Promise.all([
+        apiService.listUserStorageImages(userId, false, 100, 0),
+        apiService.listUserStorageVideos(userId, false, 100, 0),
+      ]);
+
+      // Map storage images to Asset format
+      const imageAssets: Asset[] = imagesResponse.items.map((item) => ({
+        id: item.path,
+        url: item.url,
+        name: item.name,
+        createdAt: item.last_modified ? new Date(item.last_modified) : new Date(),
+        source: 'storage' as const,
+        type: 'image' as const,
       }));
-      setAssets(mappedAssets);
+
+      // Map storage videos to Asset format
+      const videoAssets: Asset[] = videosResponse.items.map((item) => ({
+        id: item.path,
+        url: item.url,
+        name: item.name,
+        createdAt: item.last_modified ? new Date(item.last_modified) : new Date(),
+        source: 'storage' as const,
+        type: 'video' as const,
+      }));
+
+      // Combine and sort by creation date (newest first)
+      const allAssets = [...imageAssets, ...videoAssets].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      );
+
+      setAssets(allAssets);
     } catch (error) {
-      console.error('Failed to fetch assets:', error);
+      console.error('Failed to fetch assets from storage:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [isSignedIn]);
+  }, [isSignedIn, userId]);
 
   // Load assets when auth state changes
   useEffect(() => {
@@ -61,7 +85,7 @@ export function AssetProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoaded, isSignedIn, refreshAssets]);
 
-  const addAsset = useCallback(async (url: string, name: string, source: Asset['source']) => {
+  const addAsset = useCallback(async (url: string, name: string, source: Asset['source'], type: Asset['type'] = 'image') => {
     // For local/temporary assets (not uploaded to backend)
     const newAsset: Asset = {
       id: `asset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -69,6 +93,7 @@ export function AssetProvider({ children }: { children: ReactNode }) {
       name,
       createdAt: new Date(),
       source,
+      type,
     };
     setAssets((prev) => [newAsset, ...prev]);
   }, []);
@@ -89,8 +114,12 @@ export function AssetProvider({ children }: { children: ReactNode }) {
     setAssets([]);
   }, []);
 
+  // Derived state for filtered assets
+  const imageAssets = assets.filter((a) => a.type === 'image');
+  const videoAssets = assets.filter((a) => a.type === 'video');
+
   return (
-    <AssetContext.Provider value={{ assets, isLoading, addAsset, removeAsset, clearAssets, refreshAssets }}>
+    <AssetContext.Provider value={{ assets, imageAssets, videoAssets, isLoading, addAsset, removeAsset, clearAssets, refreshAssets }}>
       {children}
     </AssetContext.Provider>
   );

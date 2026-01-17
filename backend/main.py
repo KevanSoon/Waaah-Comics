@@ -309,6 +309,93 @@ def list_user_images(
     return AssetListResponse(user_id=folder, bucket=bucket, items=items)
 
 
+@app.get("/assets/user-videos", response_model=AssetListResponse)
+def list_user_videos(
+    user_id: Optional[str] = None,
+    signed: bool = False,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """List videos from Supabase Storage under users/{user_id}/.
+
+    Query params:
+      - user_id: If not provided, defaults to 'anonymous'.
+      - signed: If true, returns signed URLs (useful for private buckets).
+      - limit, offset: Pagination controls for listing.
+    """
+
+    bucket = "comics_bucket"
+    folder = _user_folder(user_id)
+    prefix = f"users/{folder}"
+
+    # Try using options for newer SDKs; fall back to basic list if unsupported
+    try:
+        entries = supabase.storage.from_(bucket).list(
+            path=prefix,
+            options={
+                "limit": limit,
+                "offset": offset,
+            },
+        )
+    except TypeError:
+        # Older client versions don't accept options; list everything and slice
+        try:
+            all_entries = supabase.storage.from_(bucket).list(path=prefix)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to list assets: {e}")
+        else:
+            if isinstance(all_entries, dict) and all_entries.get("data") is not None:
+                data = all_entries.get("data") or []
+            else:
+                data = all_entries or []
+            entries = data[offset: offset + limit]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list assets: {e}")
+
+    items: List[AssetItem] = []
+    if isinstance(entries, dict) and entries.get("data") is not None:
+        raw_list = entries.get("data") or []
+    else:
+        raw_list = entries or []
+
+    video_exts = (".mp4", ".webm", ".mov")
+
+    for obj in raw_list:
+        name = obj.get("name") if isinstance(obj, dict) else None
+        if not name or not name.lower().endswith(video_exts):
+            continue
+
+        path = f"{prefix}/{name}"
+
+        url: Optional[str] = None
+        try:
+            if signed:
+                signed_res = supabase.storage.from_(bucket).create_signed_url(path, 3600)
+                if isinstance(signed_res, dict):
+                    url = signed_res.get("signedURL") or signed_res.get("signed_url") or signed_res.get("data")
+            else:
+                url = supabase.storage.from_(bucket).get_public_url(path)
+        except Exception:
+            url = None
+
+        meta = obj.get("metadata") if isinstance(obj, dict) else None
+        size = None
+        if isinstance(meta, dict):
+            size = meta.get("size") or meta.get("contentLength")
+        lm = obj.get("last_modified") or obj.get("updated_at") or obj.get("created_at") if isinstance(obj, dict) else None
+        lm_dt = None
+        if isinstance(lm, str):
+            try:
+                lm_dt = datetime.fromisoformat(lm.replace("Z", "+00:00"))
+            except Exception:
+                lm_dt = None
+
+        if url:
+            items.append(AssetItem(path=path, name=name, url=url, size=size, last_modified=lm_dt))
+
+    return AssetListResponse(user_id=folder, bucket=bucket, items=items)
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}

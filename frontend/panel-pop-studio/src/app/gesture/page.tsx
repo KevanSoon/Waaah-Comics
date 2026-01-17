@@ -160,7 +160,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
       link.click();
 
       // Also save to assets
-      addAsset(dataUrl, `Canvas Snap ${new Date().toLocaleTimeString()}`, 'gesture');
+      addAsset(dataUrl, `Canvas Snap ${new Date().toLocaleTimeString()}`, 'gesture', 'image');
       notify("Screenshot saved & added to Assets!");
     }
   }, [canvasApi, addAsset]);
@@ -171,7 +171,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
     if (!dataUrl) return;
 
     // Save locally to assets for immediate feedback
-    addAsset(dataUrl, `Drawing ${new Date().toLocaleTimeString()}`, 'gesture');
+    addAsset(dataUrl, `Drawing ${new Date().toLocaleTimeString()}`, 'gesture', 'image');
 
     // Upload to backend storage if signed in
     if (!isSignedIn || !userId) {
@@ -377,7 +377,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
 
   const handleSaveToAssets = async (url: string) => {
     // Always add locally for immediate feedback
-    addAsset(url, `Gesture Art: ${voicePrompt.slice(0, 20)}...`, 'gesture');
+    addAsset(url, `Gesture Art: ${voicePrompt.slice(0, 20)}...`, 'gesture', 'image');
     notify("Saved locally to Assets. Uploading to Cloud...");
 
     // Upload to backend storage if signed in
@@ -423,7 +423,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
 
       if (publicUrl) {
         // Add uploaded asset (public URL) and refresh list
-        addAsset(publicUrl, `Gesture Art (Cloud): ${voicePrompt.slice(0, 20)}...`, 'gesture');
+        addAsset(publicUrl, `Gesture Art (Cloud): ${voicePrompt.slice(0, 20)}...`, 'gesture', 'image');
         notify("Uploaded to Cloud and added to Assets!");
         refreshAssets();
       } else {
