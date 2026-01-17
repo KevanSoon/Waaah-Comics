@@ -592,6 +592,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
         cursor={cursor}
         currentConfig={drawingConfig}
         isPinching={isPinching}
+        gesture={gesture}
         onToolSelect={handleToolSelect}
         onColorSelect={handleColorSelect}
         onGenerate={() => handleGenerate(voicePrompt)}
@@ -617,12 +618,13 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
       <div className="fixed bottom-8 right-8 flex flex-col gap-3 z-30">
         {/* Instructions */}
         <div className="bg-white/90 backdrop-blur p-4 rounded-xl border-2 border-gray-300 shadow-lg text-sm text-gray-700 max-w-xs">
-          <p className="font-bold text-base mb-2">✋ Gesture Drawing:</p>
+          <p className="font-bold text-base mb-2">✋ Gesture Controls:</p>
           <ul className="list-disc pl-4 space-y-1">
             <li><span className="text-green-600 font-medium">☝️ Point</span> - Draw with brush</li>
             <li><span className="text-blue-600 font-medium">🤏 Pinch</span> - Draw with brush</li>
             <li><span className="text-red-600 font-medium">✊ Fist</span> - Erase</li>
             <li><span className="text-yellow-600 font-medium">🖐️ Palm</span> - Stop drawing</li>
+            <li><span className="text-purple-600 font-medium">✌️ Peace</span> - Drag toolbar</li>
           </ul>
           <p className="text-xs text-gray-500 mt-2 italic">
             💡 Keep hand in the green "Draw Zone" shown in camera preview
