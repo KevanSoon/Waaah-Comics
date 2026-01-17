@@ -88,5 +88,16 @@ export interface Asset {
   url: string;
   name: string;
   createdAt: Date;
-  source: 'gesture' | 'comic' | 'upload';
+  source: 'gesture' | 'comic' | 'upload' | 'storage';
+  type: 'image' | 'video';
+}
+
+// Storage asset from Supabase bucket
+export interface StorageAsset {
+  path: string;
+  name: string;
+  url: string;
+  size?: number;
+  lastModified?: string;
+  type: 'image' | 'video';
 }

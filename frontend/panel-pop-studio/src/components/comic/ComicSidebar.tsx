@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Image as ImageIcon, Sparkles, Upload, Loader2, Grip } from 'lucide-react';
-import { TabView, Template } from '@/types';
+import { Layout, Image as ImageIcon, Sparkles, Upload, Loader2, Grip, Video, RefreshCw } from 'lucide-react';
+import { TabView, Template, Asset } from '@/types';
 import { TEMPLATES } from '@/types/constants';
 import { generateComicAsset } from '@/services/geminiService';
 import { useAssets } from '@/context/AssetContext';
@@ -74,6 +74,42 @@ const ImageWithAspectRatio: React.FC<{
   );
 };
 
+// Component to display video thumbnail
+const VideoThumbnail: React.FC<{
+  src: string;
+  name: string;
+}> = ({ src, name }) => {
+  return (
+    <>
+      <video
+        src={src}
+        className="w-full h-full object-cover"
+        muted
+        playsInline
+        preload="metadata"
+        onMouseEnter={(e) => {
+          const video = e.currentTarget;
+          video.currentTime = 0;
+          video.play().catch(() => {});
+        }}
+        onMouseLeave={(e) => {
+          const video = e.currentTarget;
+          video.pause();
+          video.currentTime = 0;
+        }}
+      />
+      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+      <div className="absolute top-1 left-1 bg-purple-600/90 text-white text-[10px] font-medium px-1.5 py-0.5 rounded shadow-sm flex items-center gap-1">
+        <Video className="w-3 h-3" />
+        Video
+      </div>
+      <div className="absolute bottom-1 left-1 right-1 bg-slate-900/80 text-white text-[10px] font-medium px-1.5 py-0.5 rounded shadow-sm truncate">
+        {name}
+      </div>
+    </>
+  );
+};
+
 interface ComicSidebarProps {
   activeTab: TabView;
   setActiveTab: (tab: TabView) => void;
@@ -85,6 +121,8 @@ interface ComicSidebarProps {
   selectedPanelId?: string | null;
   onImageClick?: (src: string) => void;
 }
+
+type AssetSubTab = 'images' | 'videos';
 
 export const ComicSidebar: React.FC<ComicSidebarProps> = ({
   activeTab,
@@ -100,13 +138,21 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
   const [prompt, setPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { assets, addAsset, refreshAssets } = useAssets();
+  const [assetSubTab, setAssetSubTab] = useState<AssetSubTab>('images');
+  const { assets, imageAssets, videoAssets, isLoading, addAsset, refreshAssets } = useAssets();
   const { getToken, isSignedIn } = useAuth();
 
   // Initialize API service with auth token
   useEffect(() => {
     apiService.setAuthGetter(getToken);
   }, [getToken]);
+
+  // Refresh assets when tab becomes active
+  useEffect(() => {
+    if (activeTab === 'upload' && isSignedIn) {
+      refreshAssets();
+    }
+  }, [activeTab, isSignedIn, refreshAssets]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -130,7 +176,7 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
         if (event.target?.result) {
           const url = event.target.result as string;
           onUploadImage(url);
-          addAsset(url, file.name, 'upload');
+          addAsset(url, file.name, 'upload', 'image');
         }
       };
       reader.readAsDataURL(file);
@@ -160,7 +206,7 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
       const assetUrl = await generateComicAsset(prompt);
       if (assetUrl) {
         onUploadImage(assetUrl);
-        addAsset(assetUrl, `AI: ${prompt.slice(0, 20)}...`, 'comic');
+        addAsset(assetUrl, `AI: ${prompt.slice(0, 20)}...`, 'comic', 'image');
         setPrompt('');
       } else {
         setError("Failed to generate image. Please try again.");
@@ -172,8 +218,6 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
     }
   };
 
-  // Combine user images with shared assets from gesture canvas
-  const allImages = [...userImages, ...assets.filter(a => a.source === 'gesture').map(a => a.url)];
 
   return (
     <div className="w-full md:w-80 bg-white border-r border-slate-200 flex flex-col h-full shadow-lg z-10">
@@ -274,71 +318,142 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
         )}
 
         {activeTab === 'upload' && (
-          <div className="space-y-6">
-            <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center hover:bg-slate-100 transition-colors">
-              <label className="cursor-pointer flex flex-col items-center">
-                <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                <span className="text-sm font-medium text-slate-600">Upload Image</span>
-                <span className="text-xs text-slate-400 mt-1">JPG, PNG supported</span>
-                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
-              </label>
+          <div className="space-y-4">
+            {/* Sub-tabs for Images and Videos */}
+            <div className="flex bg-slate-100 rounded-lg p-1">
+              <button
+                onClick={() => setAssetSubTab('images')}
+                className={`flex-1 py-2 px-3 text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-all ${
+                  assetSubTab === 'images'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+                Images ({imageAssets.length})
+              </button>
+              <button
+                onClick={() => setAssetSubTab('videos')}
+                className={`flex-1 py-2 px-3 text-xs font-medium rounded-md flex items-center justify-center gap-1.5 transition-all ${
+                  assetSubTab === 'videos'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Video className="w-3.5 h-3.5" />
+                Videos ({videoAssets.length})
+              </button>
             </div>
 
-            {selectedPanelId && (
+            {/* Refresh button */}
+            <div className="flex justify-end">
+              <button
+                onClick={() => refreshAssets()}
+                disabled={isLoading}
+                className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+                {isLoading ? 'Loading...' : 'Refresh'}
+              </button>
+            </div>
+
+            {/* Upload section - only show for images sub-tab */}
+            {assetSubTab === 'images' && (
+              <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center hover:bg-slate-100 transition-colors">
+                <label className="cursor-pointer flex flex-col items-center">
+                  <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                  <span className="text-sm font-medium text-slate-600">Upload Image</span>
+                  <span className="text-xs text-slate-400 mt-1">JPG, PNG supported</span>
+                  <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+                </label>
+              </div>
+            )}
+
+            {selectedPanelId && assetSubTab === 'images' && (
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                 <strong>Panel selected!</strong> Click an image below to place it.
               </div>
             )}
 
-            <div>
-              <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                <Grip className="w-3 h-3" /> {selectedPanelId ? 'Click to Place' : 'Drag or Click'}
-              </h3>
-              <div className="grid grid-cols-2 gap-2">
-                {allImages.map((src, idx) => {
-                  // Check if this image is already placed in a panel
-                  const isPlaced = Object.values(placedImages).some(
-                    (panelImage: any) => panelImage?.src === src
-                  );
+            {/* Images Grid */}
+            {assetSubTab === 'images' && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Grip className="w-3 h-3" /> {selectedPanelId ? 'Click to Place' : 'Drag or Click'}
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Show local userImages first, then storage images */}
+                  {[...userImages, ...imageAssets.map(a => a.url)].filter((v, i, arr) => arr.indexOf(v) === i).map((src, idx) => {
+                    const isPlaced = Object.values(placedImages).some(
+                      (panelImage: any) => panelImage?.src === src
+                    );
 
-                  return (
-                    <div
-                      key={idx}
-                      className={`aspect-square bg-slate-100 rounded-lg overflow-hidden border-2 transition-all relative group ${
-                        selectedPanelId
-                          ? 'cursor-pointer hover:border-blue-500 hover:shadow-lg hover:scale-105'
-                          : isPlaced
-                            ? 'border-green-500 cursor-grab active:cursor-grabbing opacity-75'
-                            : 'border-slate-200 cursor-grab active:cursor-grabbing hover:shadow-md'
-                      } ${selectedPanelId && !isPlaced ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
-                      draggable={!selectedPanelId}
-                      onClick={() => {
-                        if (selectedPanelId && onImageClick) {
-                          onImageClick(src);
-                        }
-                      }}
-                      onDragStart={(e) => {
-                        if (selectedPanelId) {
-                          e.preventDefault();
-                          return;
-                        }
-                        console.log('[DragStart] Starting drag with src:', src);
-                        e.dataTransfer.setData('image-src', src);
-                        e.dataTransfer.effectAllowed = 'copy';
-                        console.log('[DragStart] Data set successfully');
-                      }}
-                    >
-                      <ImageWithAspectRatio src={src} isPlaced={isPlaced} />
+                    return (
+                      <div
+                        key={idx}
+                        className={`aspect-square bg-slate-100 rounded-lg overflow-hidden border-2 transition-all relative group ${
+                          selectedPanelId
+                            ? 'cursor-pointer hover:border-blue-500 hover:shadow-lg hover:scale-105'
+                            : isPlaced
+                              ? 'border-green-500 cursor-grab active:cursor-grabbing opacity-75'
+                              : 'border-slate-200 cursor-grab active:cursor-grabbing hover:shadow-md'
+                        } ${selectedPanelId && !isPlaced ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
+                        draggable={!selectedPanelId}
+                        onClick={() => {
+                          if (selectedPanelId && onImageClick) {
+                            onImageClick(src);
+                          }
+                        }}
+                        onDragStart={(e) => {
+                          if (selectedPanelId) {
+                            e.preventDefault();
+                            return;
+                          }
+                          console.log('[DragStart] Starting drag with src:', src);
+                          e.dataTransfer.setData('image-src', src);
+                          e.dataTransfer.effectAllowed = 'copy';
+                          console.log('[DragStart] Data set successfully');
+                        }}
+                      >
+                        <ImageWithAspectRatio src={src} isPlaced={isPlaced} />
+                      </div>
+                    );
+                  })}
+                  {userImages.length === 0 && imageAssets.length === 0 && (
+                    <div className="col-span-2 py-8 text-center text-slate-400 text-sm italic">
+                      {isLoading ? 'Loading images...' : 'No images yet. Upload or generate some!'}
                     </div>
-                  );
-                })}
-                {allImages.length === 0 && (
-                  <div className="col-span-2 py-8 text-center text-slate-400 text-sm italic">
-                    No images yet. Upload or generate some!
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Videos Grid */}
+            {assetSubTab === 'videos' && (
+              <div>
+                <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Video className="w-3 h-3" /> Your Generated Videos
+                </h3>
+                <div className="grid grid-cols-2 gap-2">
+                  {videoAssets.map((asset, idx) => (
+                    <a
+                      key={idx}
+                      href={asset.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="aspect-video bg-slate-100 rounded-lg overflow-hidden border-2 border-slate-200 transition-all relative group hover:border-purple-400 hover:shadow-md"
+                    >
+                      <VideoThumbnail src={asset.url} name={asset.name} />
+                    </a>
+                  ))}
+                  {videoAssets.length === 0 && (
+                    <div className="col-span-2 py-8 text-center text-slate-400 text-sm italic">
+                      {isLoading ? 'Loading videos...' : 'No videos yet. Generate some from your comics!'}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

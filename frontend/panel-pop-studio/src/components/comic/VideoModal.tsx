@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Download, Loader2, Video, Sparkles, RefreshCw } from 'lucide-react';
+import { X, Download, Loader2, Video, Sparkles, RefreshCw, Save, Check } from 'lucide-react';
+import { saveVideoToStorage } from '@/services/videoService';
 
 interface VideoModalProps {
   isOpen: boolean;
@@ -11,18 +12,27 @@ interface VideoModalProps {
   progress?: number;
   error?: string;
   onRetry?: () => void;
+  userId?: string;
+  comicId?: string;
+  panelId?: string;
 }
 
-export function VideoModal({ 
-  isOpen, 
-  onClose, 
-  videoUrl, 
-  isGenerating, 
+export function VideoModal({
+  isOpen,
+  onClose,
+  videoUrl,
+  isGenerating,
   progress = 0,
   error,
-  onRetry 
+  onRetry,
+  userId,
+  comicId,
+  panelId,
 }: VideoModalProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -47,6 +57,24 @@ export function VideoModal({
       console.error('Download failed:', err);
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!videoUrl) return;
+
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    try {
+      await saveVideoToStorage(videoUrl, userId, comicId, panelId);
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Save failed:', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save video');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -141,6 +169,12 @@ export function VideoModal({
                 </video>
               </div>
               
+              {saveError && (
+                <div className="p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                  {saveError}
+                </div>
+              )}
+
               <div className="flex justify-end gap-3">
                 <button
                   onClick={handleDownload}
@@ -153,6 +187,24 @@ export function VideoModal({
                     <Download className="w-4 h-4" />
                   )}
                   Download Video
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving || saveSuccess}
+                  className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors ${
+                    saveSuccess
+                      ? 'bg-green-600 text-white'
+                      : 'bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 text-white'
+                  }`}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : saveSuccess ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  {saveSuccess ? 'Saved!' : 'Save Video'}
                 </button>
               </div>
             </div>

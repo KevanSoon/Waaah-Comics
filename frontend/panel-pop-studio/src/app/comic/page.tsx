@@ -379,7 +379,7 @@ function ComicStudioContent() {
       
       // Add to assets
       const assetName = `Comic: ${currentTemplate.name}`;
-      addAsset(uri, assetName, 'comic');
+      addAsset(uri, assetName, 'comic', 'image');
       
       // Also add to user images for immediate use
       setUserImages(prev => [uri, ...prev]);
@@ -796,6 +796,7 @@ function ComicStudioContent() {
         progress={videoProgress}
         error={videoError}
         onRetry={handleRetryVideo}
+        userId={userId ?? undefined}
       />
     </div>
   );

@@ -203,3 +203,50 @@ class VideoService {
 }
 
 export const videoService = new VideoService();
+
+/**
+ * Save a video to Supabase storage via the backend API
+ */
+export async function saveVideoToStorage(
+  videoUrl: string,
+  userId?: string,
+  comicId?: string,
+  panelId?: string
+): Promise<{ bucket: string; path: string; public_url?: string }> {
+  // Fetch the video blob from the URL (could be base64 data URL or http URL)
+  let blob: Blob;
+
+  if (videoUrl.startsWith('data:')) {
+    // Convert base64 data URL to blob
+    const response = await fetch(videoUrl);
+    blob = await response.blob();
+  } else {
+    // Fetch from URL
+    const response = await fetch(videoUrl);
+    if (!response.ok) {
+      throw new Error('Failed to fetch video');
+    }
+    blob = await response.blob();
+  }
+
+  // Create form data
+  const formData = new FormData();
+  formData.append('file', blob, `comic-video-${Date.now()}.mp4`);
+  if (userId) formData.append('user_id', userId);
+  if (comicId) formData.append('comic_id', comicId);
+  if (panelId) formData.append('panel_id', panelId);
+
+  // Upload to backend
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const response = await fetch(`${backendUrl}/comics/upload-video`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+    throw new Error(error.detail || 'Failed to save video');
+  }
+
+  return response.json();
+}
