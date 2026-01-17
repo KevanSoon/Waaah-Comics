@@ -1,13 +1,20 @@
 'use client';
 
+import { useRef, useCallback } from 'react';
 import { Sparkles, User } from 'lucide-react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
 import BalloonBackground from '@/components/ui/balloons-pop-background';
 import { ContainerScroll } from '@/components/ui/container-scroll-animation';
-import Image from 'next/image';
 
 export default function Home() {
   const { isLoaded, isSignedIn } = useAuth();
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const handleScrollStart = useCallback(() => {
+    if (videoRef.current) {
+      videoRef.current.play();
+    }
+  }, []);
 
   return (
     <>
@@ -40,14 +47,15 @@ export default function Home() {
               )}
             </>
           }
+          onScrollStart={handleScrollStart}
         >
-          <Image
-            src="/comic-hero.png"
-            alt="Comic panel showcase"
-            height={720}
-            width={1400}
+          <video
+            ref={videoRef}
+            src="/comic-demo.mp4"
+            muted
+            playsInline
             className="mx-auto rounded-2xl object-contain w-full h-auto"
-            draggable={false}
+            poster="/comic-hero.png"
           />
         </ContainerScroll>
 

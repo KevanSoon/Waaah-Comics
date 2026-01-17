@@ -1,19 +1,22 @@
 "use client";
-import React, { useRef } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { useScroll, useTransform, motion, MotionValue } from "framer-motion";
 
 export const ContainerScroll = ({
     titleComponent,
     children,
+    onScrollStart,
 }: {
     titleComponent: string | React.ReactNode;
     children: React.ReactNode;
+        onScrollStart?: () => void;
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
     const { scrollYProgress } = useScroll({
         target: containerRef,
     });
     const [isMobile, setIsMobile] = React.useState(false);
+    const [hasTriggered, setHasTriggered] = useState(false);
 
     React.useEffect(() => {
         const checkMobile = () => {
@@ -25,6 +28,17 @@ export const ContainerScroll = ({
             window.removeEventListener("resize", checkMobile);
         };
     }, []);
+
+    // Trigger callback when scroll starts
+    useEffect(() => {
+        const unsubscribe = scrollYProgress.on("change", (value) => {
+            if (value > 0.05 && !hasTriggered && onScrollStart) {
+                setHasTriggered(true);
+                onScrollStart();
+            }
+        });
+        return () => unsubscribe();
+    }, [scrollYProgress, hasTriggered, onScrollStart]);
 
     const scaleDimensions = () => {
         return isMobile ? [0.7, 0.9] : [1.05, 1];
