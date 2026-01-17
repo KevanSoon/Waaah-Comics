@@ -70,6 +70,34 @@ export interface ComicState {
 
 export type TabView = 'upload' | 'ai' | 'templates';
 
+// Multi-Strip Video Types
+export interface ComicStrip {
+  id: string;
+  name: string;
+  template: Template;
+  images: ComicState;
+  thumbnail?: string;
+  context?: string;
+  createdAt: Date;
+}
+
+export interface MultiStripVideoProgress {
+  currentStrip: number;
+  totalStrips: number;
+  stage: 'generating' | 'combining' | 'completed' | 'failed';
+  stripName?: string;
+  error?: string;
+}
+
+export interface StripVideoInput {
+  id: string;
+  name: string;
+  imageBase64: string;
+  width: number;
+  height: number;
+  context?: string;
+}
+
 // Shared Types
 export interface Asset {
   id: string;

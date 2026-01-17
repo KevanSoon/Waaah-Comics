@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { MultiStripVideoProgress, StripVideoInput } from '@/types';
 
 // API Key - in production, use environment variables
 const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
@@ -7,6 +8,13 @@ export interface GenerateVideoResponse {
   video_id: string;
   status: 'processing' | 'completed' | 'failed';
   video_url?: string;
+  error?: string;
+}
+
+export interface MultiStripVideoResult {
+  success: boolean;
+  stripVideos: { stripId: string; name: string; videoUrl: string }[];
+  combinedVideoUrl?: string;
   error?: string;
 }
 
@@ -118,7 +126,7 @@ class VideoService {
 
       // Call Veo 2 API
       const operation = await this.client.models.generateVideos({
-        model: 'veo-2.0-generate-001',
+        model: 'veo-3.0-generate-001',
         prompt: animationPrompt,
         image: {
           imageBytes: base64Data,
@@ -199,6 +207,237 @@ class VideoService {
         error: error instanceof Error ? error.message : 'Video generation failed',
       };
     }
+  }
+
+  /**
+   * Generate videos for multiple comic strips and combine them into one final video
+   * Each strip maintains its strict format - the final video shows strips sequentially
+   * @param strips - Array of comic strips with their images and metadata
+   * @param onProgress - Callback for progress updates
+   * @returns Combined video URL or individual strip videos
+   */
+  async generateMultiStripVideo(
+    strips: StripVideoInput[],
+    onProgress?: (progress: MultiStripVideoProgress) => void
+  ): Promise<MultiStripVideoResult> {
+    const stripVideos: { stripId: string; name: string; videoUrl: string }[] = [];
+
+    try {
+      console.log(`[VideoService] Starting multi-strip video generation for ${strips.length} strips`);
+      
+      // Log all strips being processed
+      strips.forEach((strip, i) => {
+        console.log(`[VideoService] Strip ${i + 1}: ${strip.name}, has image: ${!!strip.imageBase64}, size: ${strip.imageBase64?.length || 0}`);
+      });
+
+      // APPROACH: Create a combined image with all strips stacked vertically,
+      // then generate ONE video from that combined image
+      if (strips.length > 1) {
+        onProgress?.({
+          currentStrip: 1,
+          totalStrips: strips.length,
+          stage: 'combining',
+          stripName: 'Creating combined comic layout...',
+        });
+
+        try {
+          // Create a combined image with all strips
+          const combinedImage = await this.combineStripImages(strips);
+          
+          // Calculate combined dimensions
+          const maxWidth = Math.max(...strips.map(s => s.width));
+          const totalHeight = strips.reduce((sum, s) => sum + s.height, 0) + (strips.length - 1) * 20; // 20px gap between strips
+
+          onProgress?.({
+            currentStrip: 1,
+            totalStrips: 1,
+            stage: 'generating',
+            stripName: 'Generating combined video...',
+          });
+
+          // Build combined context from all strips
+          const combinedContext = strips
+            .map((s, i) => s.context ? `Strip ${i + 1} (${s.name}): ${s.context}` : '')
+            .filter(Boolean)
+            .join('\n');
+
+          console.log('[VideoService] Generating video for combined image...');
+          
+          const response = await this.generateVideo(
+            combinedImage,
+            undefined, // use default prompt for strict format
+            maxWidth,
+            totalHeight,
+            combinedContext || `Combined comic with ${strips.length} strips arranged vertically. Animate each strip's contents while keeping the overall layout frozen.`
+          );
+
+          if (response.status === 'completed' && response.video_url) {
+            // Create strip video entries for each original strip
+            strips.forEach(strip => {
+              stripVideos.push({
+                stripId: strip.id,
+                name: strip.name,
+                videoUrl: response.video_url!,
+              });
+            });
+
+            onProgress?.({
+              currentStrip: strips.length,
+              totalStrips: strips.length,
+              stage: 'completed',
+            });
+
+            return {
+              success: true,
+              stripVideos,
+              combinedVideoUrl: response.video_url,
+            };
+          } else {
+            throw new Error(response.error || 'Combined video generation failed');
+          }
+        } catch (combineError) {
+          console.error('[VideoService] Combined approach failed, falling back to individual videos:', combineError);
+          // Fall back to individual video generation
+        }
+      }
+
+      // Fallback: Generate individual videos for each strip
+      for (let i = 0; i < strips.length; i++) {
+        const strip = strips[i];
+        
+        onProgress?.({
+          currentStrip: i + 1,
+          totalStrips: strips.length,
+          stage: 'generating',
+          stripName: strip.name,
+        });
+
+        console.log(`[VideoService] Generating video for strip ${i + 1}/${strips.length}: ${strip.name}`);
+        console.log(`[VideoService] Strip image size: ${strip.imageBase64?.length || 0} chars`);
+
+        if (!strip.imageBase64 || strip.imageBase64.length < 100) {
+          console.error(`[VideoService] Strip ${strip.name} has invalid or empty image data`);
+          continue;
+        }
+
+        const response = await this.generateVideo(
+          strip.imageBase64,
+          undefined, // use default prompt for strict format
+          strip.width,
+          strip.height,
+          strip.context
+        );
+
+        if (response.status === 'completed' && response.video_url) {
+          stripVideos.push({
+            stripId: strip.id,
+            name: strip.name,
+            videoUrl: response.video_url,
+          });
+          console.log(`[VideoService] Successfully generated video for strip: ${strip.name}`);
+        } else {
+          console.error(`[VideoService] Failed to generate video for strip: ${strip.name}`, response.error);
+          // Continue with other strips even if one fails
+        }
+      }
+
+      if (stripVideos.length === 0) {
+        return {
+          success: false,
+          stripVideos: [],
+          error: 'Failed to generate any videos. Please check that all strips have valid images.',
+        };
+      }
+
+      onProgress?.({
+        currentStrip: strips.length,
+        totalStrips: strips.length,
+        stage: 'completed',
+      });
+
+      // Return individual videos (can't properly combine on client-side)
+      return {
+        success: true,
+        stripVideos,
+        combinedVideoUrl: stripVideos.length === 1 ? stripVideos[0].videoUrl : undefined,
+        error: stripVideos.length > 1 ? 'Multiple videos generated. Use the combined approach or download individually.' : undefined,
+      };
+
+    } catch (error) {
+      console.error('[VideoService] Multi-strip error:', error);
+      onProgress?.({
+        currentStrip: 0,
+        totalStrips: strips.length,
+        stage: 'failed',
+        error: error instanceof Error ? error.message : 'Multi-strip video generation failed',
+      });
+
+      return {
+        success: false,
+        stripVideos,
+        error: error instanceof Error ? error.message : 'Multi-strip video generation failed',
+      };
+    }
+  }
+
+  /**
+   * Combine multiple strip images into a single vertically stacked image
+   */
+  private async combineStripImages(strips: StripVideoInput[]): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const maxWidth = Math.max(...strips.map(s => s.width));
+      const gap = 20; // Gap between strips
+      const totalHeight = strips.reduce((sum, s) => sum + s.height, 0) + (strips.length - 1) * gap;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = maxWidth;
+      canvas.height = totalHeight;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        reject(new Error('Could not create canvas context'));
+        return;
+      }
+
+      // Fill with white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, maxWidth, totalHeight);
+
+      let loadedCount = 0;
+      let currentY = 0;
+      const imagePositions: { y: number; height: number }[] = [];
+
+      // Calculate positions first
+      strips.forEach((strip, i) => {
+        imagePositions.push({ y: currentY, height: strip.height });
+        currentY += strip.height + (i < strips.length - 1 ? gap : 0);
+      });
+
+      // Load and draw all images
+      strips.forEach((strip, index) => {
+        const img = new Image();
+        img.onload = () => {
+          // Center the image horizontally if it's narrower than maxWidth
+          const x = (maxWidth - strip.width) / 2;
+          ctx.drawImage(img, x, imagePositions[index].y, strip.width, strip.height);
+          
+          loadedCount++;
+          if (loadedCount === strips.length) {
+            // All images loaded, return the combined image
+            resolve(canvas.toDataURL('image/png'));
+          }
+        };
+        img.onerror = () => {
+          console.error(`[VideoService] Failed to load image for strip: ${strip.name}`);
+          loadedCount++;
+          if (loadedCount === strips.length) {
+            // Still resolve even if some images failed
+            resolve(canvas.toDataURL('image/png'));
+          }
+        };
+        img.src = strip.imageBase64;
+      });
+    });
   }
 }
 

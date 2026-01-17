@@ -2,16 +2,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Download, RotateCcw, ZoomIn, Save, Video, Sparkles } from 'lucide-react';
+import { Download, RotateCcw, ZoomIn, Save, Video, Sparkles, Film, Layers } from 'lucide-react';
 import { TEMPLATES } from '@/types/constants';
 import { useAssets } from '@/context/AssetContext';
 import { ComicCanvas } from '@/components/comic/ComicCanvas';
-import { ComicState, PanelImageState, TabView, Template } from '@/types';
+import { ComicState, PanelImageState, TabView, Template, ComicStrip, MultiStripVideoProgress, StripVideoInput } from '@/types';
 import { useAuth } from '@clerk/nextjs';
 import { apiService, Comic } from '@/services/apiService';
 import ProtectedRoute from '@/components/shared/ProtectedRoute';
 
 import { VideoModal } from '@/components/comic/VideoModal';
+import { MultiStripVideoModal } from '@/components/comic/MultiStripVideoModal';
 import { videoService } from '@/services/videoService';
 
 
@@ -51,6 +52,16 @@ function ComicStudioContent() {
   const [videoError, setVideoError] = useState<string | undefined>();
   const [showVideoContextInput, setShowVideoContextInput] = useState(false);
   const [videoContext, setVideoContext] = useState('');
+
+  // Multi-strip video state
+  const [isMultiStripModalOpen, setIsMultiStripModalOpen] = useState(false);
+  const [savedStrips, setSavedStrips] = useState<ComicStrip[]>([]);
+  const [isGeneratingMultiStripVideo, setIsGeneratingMultiStripVideo] = useState(false);
+  const [multiStripProgress, setMultiStripProgress] = useState<MultiStripVideoProgress | undefined>();
+  const [multiStripVideos, setMultiStripVideos] = useState<{ stripId: string; name: string; videoUrl: string }[]>([]);
+  const [combinedVideoUrl, setCombinedVideoUrl] = useState<string | undefined>();
+  const [multiStripError, setMultiStripError] = useState<string | undefined>();
+  const [stripCounter, setStripCounter] = useState(1);
 
   const { addAsset } = useAssets();
   const [savedComics, setSavedComics] = useState<Comic[]>([]);
@@ -595,6 +606,149 @@ function ComicStudioContent() {
     }
   };
 
+  // Multi-strip video handlers
+  const handleOpenMultiStripModal = () => {
+    setIsMultiStripModalOpen(true);
+  };
+
+  const handleCloseMultiStripModal = () => {
+    if (!isGeneratingMultiStripVideo) {
+      setIsMultiStripModalOpen(false);
+    }
+  };
+
+  const handleAddCurrentStrip = async () => {
+    if (!stageRef.current || Object.keys(images).length === 0) {
+      alert('Please add some images to the comic before saving as a strip.');
+      return;
+    }
+
+    try {
+      // Wait for images to be fully rendered
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      const thumbnail = await getCanvasDataURL();
+      
+      console.log('[MultiStrip] Captured thumbnail, length:', thumbnail?.length || 0);
+      
+      if (!thumbnail || thumbnail.length < 100) {
+        alert('Failed to capture comic image. Please try again.');
+        return;
+      }
+
+      const newStrip: ComicStrip = {
+        id: crypto.randomUUID(),
+        name: `Strip ${stripCounter}`,
+        template: { ...currentTemplate },
+        images: { ...images },
+        thumbnail,
+        context: videoContext.trim() || undefined,
+        createdAt: new Date(),
+      };
+
+      setSavedStrips(prev => {
+        const updated = [...prev, newStrip];
+        console.log('[MultiStrip] Total strips after add:', updated.length);
+        updated.forEach((s, i) => {
+          console.log(`[MultiStrip] Strip ${i + 1}: ${s.name}, thumbnail length: ${s.thumbnail?.length || 0}`);
+        });
+        return updated;
+      });
+      setStripCounter(prev => prev + 1);
+      
+      // Clear current canvas for a new strip
+      setImages({});
+      setSelectedPanelId(null);
+      setVideoContext('');
+      
+      console.log('[MultiStrip] Strip added:', newStrip.name);
+    } catch (error) {
+      console.error('[MultiStrip] Error adding strip:', error);
+      alert('Failed to save strip. Please try again.');
+    }
+  };
+
+  const handleRemoveStrip = (stripId: string) => {
+    setSavedStrips(prev => prev.filter(s => s.id !== stripId));
+    // Also remove any generated video for this strip
+    setMultiStripVideos(prev => prev.filter(v => v.stripId !== stripId));
+  };
+
+  const handleReorderStrips = (reorderedStrips: ComicStrip[]) => {
+    setSavedStrips(reorderedStrips);
+  };
+
+  const handleUpdateStrip = (stripId: string, updates: Partial<ComicStrip>) => {
+    setSavedStrips(prev => prev.map(strip => 
+      strip.id === stripId ? { ...strip, ...updates } : strip
+    ));
+  };
+
+  const handleGenerateMultiStripVideo = async () => {
+    if (savedStrips.length === 0) {
+      alert('Please add at least one strip before generating a video.');
+      return;
+    }
+
+    console.log('[MultiStrip] Starting video generation with', savedStrips.length, 'strips');
+    savedStrips.forEach((strip, i) => {
+      console.log(`[MultiStrip] Strip ${i + 1}: ${strip.name}, thumbnail: ${strip.thumbnail?.length || 0} chars`);
+    });
+
+    setIsGeneratingMultiStripVideo(true);
+    setMultiStripVideos([]);
+    setCombinedVideoUrl(undefined);
+    setMultiStripError(undefined);
+    setMultiStripProgress({
+      currentStrip: 0,
+      totalStrips: savedStrips.length,
+      stage: 'generating',
+    });
+
+    try {
+      // Prepare strip inputs using stored thumbnails
+      const stripInputs: StripVideoInput[] = savedStrips.map((strip) => {
+        console.log(`[MultiStrip] Preparing strip: ${strip.name}, thumbnail length: ${strip.thumbnail?.length || 0}`);
+        return {
+          id: strip.id,
+          name: strip.name,
+          imageBase64: strip.thumbnail || '',
+          width: strip.template.width,
+          height: strip.template.height,
+          context: strip.context,
+        };
+      });
+
+      console.log('[MultiStrip] Strip inputs prepared:', stripInputs.length);
+      stripInputs.forEach((s, i) => {
+        console.log(`[MultiStrip] Input ${i + 1}: ${s.name}, imageBase64 length: ${s.imageBase64?.length || 0}`);
+      });
+
+      const result = await videoService.generateMultiStripVideo(
+        stripInputs,
+        (progress) => {
+          setMultiStripProgress(progress);
+        }
+      );
+
+      if (result.success) {
+        setMultiStripVideos(result.stripVideos);
+        setCombinedVideoUrl(result.combinedVideoUrl);
+        if (result.error) {
+          // Partial success - videos generated but not combined
+          setMultiStripError(result.error);
+        }
+      } else {
+        setMultiStripError(result.error || 'Video generation failed');
+      }
+    } catch (error) {
+      console.error('[MultiStrip] Error generating videos:', error);
+      setMultiStripError(error instanceof Error ? error.message : 'Failed to generate videos');
+    } finally {
+      setIsGeneratingMultiStripVideo(false);
+    }
+  };
+
   const handleNewUserImage = (url: string) => {
     setUserImages(prev => [url, ...prev]);
     setActiveTab('upload');
@@ -672,6 +826,20 @@ function ComicStudioContent() {
               <Video className="w-4 h-4" />
               <Sparkles className="w-3 h-3" />
               <span className="hidden sm:inline">Animate</span>
+            </button>
+            <button
+              onClick={handleOpenMultiStripModal}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all shadow-md hover:shadow-lg transform active:scale-95 duration-100 relative"
+              title="Multi-Strip Video - Combine multiple comic strips into one video"
+            >
+              <Film className="w-4 h-4" />
+              <Layers className="w-3 h-3" />
+              <span className="hidden sm:inline">Multi-Strip</span>
+              {savedStrips.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-pink-500 rounded-full text-xs flex items-center justify-center font-bold">
+                  {savedStrips.length}
+                </span>
+              )}
             </button>
             <button
               onClick={handleUploadPanel}
@@ -797,6 +965,25 @@ function ComicStudioContent() {
         error={videoError}
         onRetry={handleRetryVideo}
         userId={userId ?? undefined}
+      />
+
+      {/* Multi-Strip Video Modal */}
+      <MultiStripVideoModal
+        isOpen={isMultiStripModalOpen}
+        onClose={handleCloseMultiStripModal}
+        strips={savedStrips}
+        onAddCurrentStrip={handleAddCurrentStrip}
+        onRemoveStrip={handleRemoveStrip}
+        onReorderStrips={handleReorderStrips}
+        onUpdateStrip={handleUpdateStrip}
+        onGenerateVideo={handleGenerateMultiStripVideo}
+        isGenerating={isGeneratingMultiStripVideo}
+        progress={multiStripProgress}
+        stripVideos={multiStripVideos}
+        combinedVideoUrl={combinedVideoUrl}
+        error={multiStripError}
+        userId={userId ?? undefined}
+        hasCurrentStripImages={Object.keys(images).length > 0}
       />
     </div>
   );
