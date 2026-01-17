@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Hand, LayoutGrid, Home, Images } from 'lucide-react';
+import { Hand, LayoutGrid, Home, FolderOpen } from 'lucide-react';
 import UserButton from './UserButton';
 
 export default function Navigation() {
@@ -12,7 +12,7 @@ export default function Navigation() {
     { href: '/', label: 'Home', icon: Home },
     { href: '/gesture', label: 'Gesture Canvas', icon: Hand },
     { href: '/comic', label: 'Comic Studio', icon: LayoutGrid },
-    { href: '/assets', label: 'Gallery', icon: Images },
+    { href: '/projects', label: 'Projects', icon: FolderOpen },
   ];
 
   return (

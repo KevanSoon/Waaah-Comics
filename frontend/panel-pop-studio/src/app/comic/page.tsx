@@ -2,14 +2,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { Download, RotateCcw, ZoomIn, Save, Video, Sparkles, Film, Layers } from 'lucide-react';
+import { Download, RotateCcw, ZoomIn, Save, Video, Sparkles, ChevronDown, FolderOpen, Plus, Film, Layers } from 'lucide-react';
 import { TEMPLATES } from '@/types/constants';
 import { useAssets } from '@/context/AssetContext';
 import { ComicCanvas } from '@/components/comic/ComicCanvas';
 import { ComicState, PanelImageState, TabView, Template, ComicStrip, MultiStripVideoProgress, StripVideoInput } from '@/types';
 import { useAuth } from '@clerk/nextjs';
-import { apiService, Comic } from '@/services/apiService';
+import { apiService, Comic, Project } from '@/services/apiService';
 import ProtectedRoute from '@/components/shared/ProtectedRoute';
+import { useProjects } from '@/context/ProjectsContext';
 
 import { VideoModal } from '@/components/comic/VideoModal';
 import { MultiStripVideoModal } from '@/components/comic/MultiStripVideoModal';
@@ -68,6 +69,19 @@ function ComicStudioContent() {
   const [currentComicId, setCurrentComicId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Get projects from shared context
+  const { 
+    projects, 
+    selectedProjectId, 
+    setSelectedProjectId, 
+    createProject,
+    refreshProjects 
+  } = useProjects();
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+
   const stageRef = useRef<any>(null);
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
@@ -109,9 +123,9 @@ function ComicStudioContent() {
     apiService.setAuthGetter(getToken);
   }, [getToken]);
 
-  // Load user's saved comics and add assets to userImages
+  // Load user's saved comics
   useEffect(() => {
-    async function loadUserData() {
+    async function loadComics() {
       if (isSignedIn) {
         try {
           const comics = await apiService.getUserComics();
@@ -121,7 +135,7 @@ function ComicStudioContent() {
         }
       }
     }
-    loadUserData();
+    loadComics();
   }, [isSignedIn]);
 
   // Sync assets to userImages
@@ -414,6 +428,10 @@ function ComicStudioContent() {
       alert('Please add some images before uploading.');
       return;
     }
+    if (!selectedProjectId) {
+      alert('Please select a project to upload the panel to.');
+      return;
+    }
 
     setIsUploading(true);
     try {
@@ -448,6 +466,16 @@ function ComicStudioContent() {
       const json = await res.json();
       const publicUrl: string | null = json?.public_url || null;
 
+      // Add panel to selected project
+      if (publicUrl && userId) {
+        await apiService.addPanelToProject(selectedProjectId, userId, {
+          image_url: publicUrl,
+        });
+
+        // Refresh projects from context to get updated panel list
+        await refreshProjects();
+      }
+
       // Add to user images if public URL is available; otherwise keep local data URL
       if (publicUrl) {
         setUserImages(prev => [publicUrl, ...prev]);
@@ -455,7 +483,7 @@ function ComicStudioContent() {
         setUserImages(prev => [dataUrl, ...prev]);
       }
 
-      alert('Panel uploaded successfully!');
+      alert('Panel uploaded to project successfully!');
     } catch (err) {
       console.error('[Upload] Error:', err);
       alert('Failed to upload panel. Please try again.');
@@ -463,6 +491,28 @@ function ComicStudioContent() {
       setIsUploading(false);
     }
   };
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+
+    setIsCreatingProject(true);
+    try {
+      const project = await createProject(
+        newProjectName.trim(),
+        undefined
+      );
+      setSelectedProjectId(project.id);
+      setShowCreateProjectModal(false);
+      setNewProjectName('');
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      alert('Failed to create project. Please try again.');
+    } finally {
+      setIsCreatingProject(false);
+    }
+  };
+
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   const handleReset = () => {
     if (window.confirm('Clear all panels?')) {
@@ -817,6 +867,73 @@ function ComicStudioContent() {
               <span className="hidden sm:inline">{isSaving ? 'Saving...' : (currentComicId ? 'Update' : 'Save')}</span>
             </button>
             <div className="h-6 w-px bg-slate-200 mx-2"></div>
+
+            {/* Project Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProjectDropdown(!showProjectDropdown)}
+                className="flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors border border-slate-200"
+              >
+                <FolderOpen className="w-4 h-4" />
+                <span className="hidden sm:inline max-w-[120px] truncate">
+                  {selectedProject ? selectedProject.name : 'Select Project'}
+                </span>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+
+              {showProjectDropdown && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowProjectDropdown(false)}
+                  />
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-lg shadow-xl border border-slate-200 z-20 overflow-hidden">
+                    <div className="p-2 border-b border-slate-100">
+                      <p className="text-xs text-slate-500 font-medium px-2 py-1">Select a project</p>
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {projects.length === 0 ? (
+                        <div className="p-4 text-center text-sm text-slate-500">
+                          No projects yet
+                        </div>
+                      ) : (
+                        projects.map((project) => (
+                          <button
+                            key={project.id}
+                            onClick={() => {
+                              setSelectedProjectId(project.id);
+                              setShowProjectDropdown(false);
+                            }}
+                            className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 transition-colors ${
+                              selectedProjectId === project.id ? 'bg-purple-50 text-purple-700' : 'text-slate-700'
+                            }`}
+                          >
+                            <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{project.name}</p>
+                              <p className="text-xs text-slate-500">{project.panels.length} panels</p>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                    <div className="p-2 border-t border-slate-100">
+                      <button
+                        onClick={() => {
+                          setShowProjectDropdown(false);
+                          setShowCreateProjectModal(true);
+                        }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create New Project
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               onClick={handleOpenVideoContext}
               disabled={isExporting || isGeneratingVideo || Object.keys(images).length === 0}
@@ -843,14 +960,14 @@ function ComicStudioContent() {
             </button>
             <button
               onClick={handleUploadPanel}
-              disabled={isUploading || Object.keys(images).length === 0}
+              disabled={isUploading || Object.keys(images).length === 0 || !selectedProjectId}
               className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors shadow-md hover:shadow-lg transform active:scale-95 duration-100"
-              title="Upload Selected Panel"
+              title={selectedProjectId ? "Upload Selected Panel to Project" : "Select a project first"}
             >
               <Save className="w-4 h-4" />
               <span className="hidden sm:inline">{isUploading ? 'Uploading...' : 'Upload Panel'}</span>
             </button>
-            
+
             <button
               onClick={handleExport}
               disabled={isExporting || Object.keys(images).length === 0}
@@ -985,6 +1102,74 @@ function ComicStudioContent() {
         userId={userId ?? undefined}
         hasCurrentStripImages={Object.keys(images).length > 0}
       />
+
+      {/* Create Project Modal */}
+      {showCreateProjectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowCreateProjectModal(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-purple-100 rounded-lg">
+                  <FolderOpen className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">Create New Project</h2>
+                  <p className="text-sm text-slate-500">Organize your comic panels</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Project Name
+                </label>
+                <input
+                  type="text"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="My Comic Story"
+                  className="w-full px-4 py-3 border border-slate-300 rounded-lg text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newProjectName.trim()) {
+                      handleCreateProject();
+                    }
+                  }}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => setShowCreateProjectModal(false)}
+                  className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreateProject}
+                  disabled={!newProjectName.trim() || isCreatingProject}
+                  className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors"
+                >
+                  {isCreatingProject ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      Create
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

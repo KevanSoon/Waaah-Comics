@@ -6,6 +6,7 @@ import { dark } from '@clerk/themes';
 import Navigation from '@/components/shared/Navigation';
 import { AssetProvider } from '@/context/AssetContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { ProjectsProvider } from '@/context/ProjectsContext';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -42,8 +43,10 @@ export default function RootLayout({
         <body className={`${inter.className} bg-gray-950 min-h-screen`}>
           <AuthProvider>
             <AssetProvider>
-              <Navigation />
-              <main className="h-[calc(100vh-64px)]">{children}</main>
+              <ProjectsProvider>
+                <Navigation />
+                <main className="h-[calc(100vh-64px)]">{children}</main>
+              </ProjectsProvider>
             </AssetProvider>
           </AuthProvider>
         </body>

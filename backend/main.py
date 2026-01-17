@@ -52,6 +52,43 @@ class UploadResponse(BaseModel):
     public_url: Optional[str]
 
 
+# Project models
+class ProjectCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+
+
+class ProjectPanelItem(BaseModel):
+    id: str
+    project_id: str
+    image_url: str
+    panel_order: int
+    created_at: Optional[datetime] = None
+
+
+class ProjectItem(BaseModel):
+    id: str
+    user_id: str
+    name: str
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    panels: List[ProjectPanelItem] = []
+
+
+class AddPanelRequest(BaseModel):
+    image_url: str
+    panel_order: Optional[int] = None
+
+
 def _validate_image(file: UploadFile) -> None:
     allowed_types = {"image/png", "image/jpeg", "image/webp"}
     if file.content_type not in allowed_types:
@@ -394,6 +431,289 @@ def list_user_videos(
             items.append(AssetItem(path=path, name=name, url=url, size=size, last_modified=lm_dt))
 
     return AssetListResponse(user_id=folder, bucket=bucket, items=items)
+
+
+# ==================== PROJECTS API ====================
+
+def _get_or_create_user(user_id: str) -> str:
+    """Get user's database UUID from clerk_id, creating user if needed."""
+    # Try to find existing user
+    result = supabase.table("users").select("id").eq("clerk_id", user_id).execute()
+    if result.data and len(result.data) > 0:
+        return result.data[0]["id"]
+
+    # Create new user
+    new_user = supabase.table("users").insert({"clerk_id": user_id}).execute()
+    if new_user.data and len(new_user.data) > 0:
+        return new_user.data[0]["id"]
+
+    raise HTTPException(status_code=500, detail="Failed to create user")
+
+
+@app.get("/projects", response_model=List[ProjectItem])
+def list_projects(user_id: str):
+    """List all projects for a user."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        result = supabase.table("projects").select("*").eq("user_id", db_user_id).order("created_at", desc=True).execute()
+
+        projects = []
+        for proj in result.data or []:
+            # Get panels for each project
+            panels_result = supabase.table("project_panels").select("*").eq("project_id", proj["id"]).order("panel_order").execute()
+
+            panels = [
+                ProjectPanelItem(
+                    id=p["id"],
+                    project_id=p["project_id"],
+                    image_url=p["image_url"],
+                    panel_order=p["panel_order"],
+                    created_at=p.get("created_at"),
+                )
+                for p in (panels_result.data or [])
+            ]
+
+            projects.append(ProjectItem(
+                id=proj["id"],
+                user_id=proj["user_id"],
+                name=proj["name"],
+                description=proj.get("description"),
+                cover_image_url=proj.get("cover_image_url"),
+                created_at=proj.get("created_at"),
+                updated_at=proj.get("updated_at"),
+                panels=panels,
+            ))
+
+        return projects
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list projects: {e}")
+
+
+@app.post("/projects", response_model=ProjectItem)
+def create_project(data: ProjectCreate, user_id: str):
+    """Create a new project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        result = supabase.table("projects").insert({
+            "user_id": db_user_id,
+            "name": data.name,
+            "description": data.description,
+            "cover_image_url": data.cover_image_url,
+        }).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to create project")
+
+        proj = result.data[0]
+        return ProjectItem(
+            id=proj["id"],
+            user_id=proj["user_id"],
+            name=proj["name"],
+            description=proj.get("description"),
+            cover_image_url=proj.get("cover_image_url"),
+            created_at=proj.get("created_at"),
+            updated_at=proj.get("updated_at"),
+            panels=[],
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create project: {e}")
+
+
+@app.get("/projects/{project_id}", response_model=ProjectItem)
+def get_project(project_id: str, user_id: str):
+    """Get a specific project with its panels."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        result = supabase.table("projects").select("*").eq("id", project_id).eq("user_id", db_user_id).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        proj = result.data[0]
+
+        # Get panels
+        panels_result = supabase.table("project_panels").select("*").eq("project_id", project_id).order("panel_order").execute()
+
+        panels = [
+            ProjectPanelItem(
+                id=p["id"],
+                project_id=p["project_id"],
+                image_url=p["image_url"],
+                panel_order=p["panel_order"],
+                created_at=p.get("created_at"),
+            )
+            for p in (panels_result.data or [])
+        ]
+
+        return ProjectItem(
+            id=proj["id"],
+            user_id=proj["user_id"],
+            name=proj["name"],
+            description=proj.get("description"),
+            cover_image_url=proj.get("cover_image_url"),
+            created_at=proj.get("created_at"),
+            updated_at=proj.get("updated_at"),
+            panels=panels,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get project: {e}")
+
+
+@app.put("/projects/{project_id}", response_model=ProjectItem)
+def update_project(project_id: str, data: ProjectUpdate, user_id: str):
+    """Update a project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        update_data = {}
+        if data.name is not None:
+            update_data["name"] = data.name
+        if data.description is not None:
+            update_data["description"] = data.description
+        if data.cover_image_url is not None:
+            update_data["cover_image_url"] = data.cover_image_url
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+
+        result = supabase.table("projects").update(update_data).eq("id", project_id).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to update project")
+
+        proj = result.data[0]
+
+        # Get panels
+        panels_result = supabase.table("project_panels").select("*").eq("project_id", project_id).order("panel_order").execute()
+
+        panels = [
+            ProjectPanelItem(
+                id=p["id"],
+                project_id=p["project_id"],
+                image_url=p["image_url"],
+                panel_order=p["panel_order"],
+                created_at=p.get("created_at"),
+            )
+            for p in (panels_result.data or [])
+        ]
+
+        return ProjectItem(
+            id=proj["id"],
+            user_id=proj["user_id"],
+            name=proj["name"],
+            description=proj.get("description"),
+            cover_image_url=proj.get("cover_image_url"),
+            created_at=proj.get("created_at"),
+            updated_at=proj.get("updated_at"),
+            panels=panels,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update project: {e}")
+
+
+@app.delete("/projects/{project_id}")
+def delete_project(project_id: str, user_id: str):
+    """Delete a project and all its panels."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Delete project (cascades to panels)
+        supabase.table("projects").delete().eq("id", project_id).execute()
+
+        return {"status": "deleted", "project_id": project_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {e}")
+
+
+@app.post("/projects/{project_id}/panels", response_model=ProjectPanelItem)
+def add_panel_to_project(project_id: str, data: AddPanelRequest, user_id: str):
+    """Add a panel to a project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify project ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Get max order if not specified
+        panel_order = data.panel_order
+        if panel_order is None:
+            max_order_result = supabase.table("project_panels").select("panel_order").eq("project_id", project_id).order("panel_order", desc=True).limit(1).execute()
+            if max_order_result.data and len(max_order_result.data) > 0:
+                panel_order = max_order_result.data[0]["panel_order"] + 1
+            else:
+                panel_order = 0
+
+        result = supabase.table("project_panels").insert({
+            "project_id": project_id,
+            "image_url": data.image_url,
+            "panel_order": panel_order,
+        }).execute()
+
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=500, detail="Failed to add panel")
+
+        p = result.data[0]
+
+        # Update project cover image if it's the first panel
+        panels_count = supabase.table("project_panels").select("id", count="exact").eq("project_id", project_id).execute()
+        if panels_count.count == 1:
+            supabase.table("projects").update({"cover_image_url": data.image_url}).eq("id", project_id).execute()
+
+        return ProjectPanelItem(
+            id=p["id"],
+            project_id=p["project_id"],
+            image_url=p["image_url"],
+            panel_order=p["panel_order"],
+            created_at=p.get("created_at"),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add panel: {e}")
+
+
+@app.delete("/projects/{project_id}/panels/{panel_id}")
+def delete_panel_from_project(project_id: str, panel_id: str, user_id: str):
+    """Delete a panel from a project."""
+    try:
+        db_user_id = _get_or_create_user(user_id)
+
+        # Verify project ownership
+        existing = supabase.table("projects").select("id").eq("id", project_id).eq("user_id", db_user_id).execute()
+        if not existing.data or len(existing.data) == 0:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Delete panel
+        supabase.table("project_panels").delete().eq("id", panel_id).eq("project_id", project_id).execute()
+
+        return {"status": "deleted", "panel_id": panel_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete panel: {e}")
 
 
 @app.get("/health")
