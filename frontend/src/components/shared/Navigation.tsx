@@ -16,12 +16,12 @@ export default function Navigation() {
   ];
 
   return (
-    <nav className="bg-gray-900 border-b border-gray-700">
+    <nav className="relative z-50 bg-gray-900 border-b border-gray-700">
       <div className="max-w-7xl mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-2">
             <div className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
-              PanelPop Studio
+              Waaah-Comics
             </div>
           </div>
           <div className="flex items-center gap-4">

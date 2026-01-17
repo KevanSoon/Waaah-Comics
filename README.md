@@ -1,1 +1,1 @@
-# PanelPop
+# Waaah-Comics

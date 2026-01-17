@@ -560,8 +560,8 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
               style={{
                 // rawHandPosition.x is raw MediaPipe coords (0=left of sensor, 1=right)
                 // Video element uses -scale-x-100 which mirrors it visually
-                // So we use rawHandPosition.x directly - the CSS mirror handles the flip
-                left: `${rawHandPosition.x * 100}%`,
+                // We need to invert X to match the mirrored video display
+                left: `${(1 - rawHandPosition.x) * 100}%`,
                 top: `${rawHandPosition.y * 100}%`,
               }}
             />

@@ -11,7 +11,7 @@ import { ProjectsProvider } from '@/context/ProjectsContext';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'PanelPop Studio',
+  title: 'Waaah-Comics',
   description: 'Create comics with gesture-controlled drawing and AI-powered generation',
 };
 

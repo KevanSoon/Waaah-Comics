@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Palette,
   Eraser,
@@ -445,15 +446,15 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
       })}
       </div>
 
-      {/* Clear Confirmation Modal */}
-      {showClearConfirm && (
+      {/* Clear Confirmation Modal - rendered with portal to ensure proper centering */}
+      {showClearConfirm && createPortal(
         <div
           className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100]"
           onClick={() => setShowClearConfirm(false)}
         >
           <div
             ref={clearConfirmRef}
-            className="bg-white rounded-2xl p-8 shadow-2xl max-w-md mx-4 text-center"
+            className="bg-white rounded-2xl p-8 shadow-2xl min-w-[320px] max-w-sm text-center"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-20 h-20 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
@@ -505,7 +506,8 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
               Gesture: Hover over red button for 5 seconds
             </p>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,4 @@
-# PanelPop Studio
+# Waaah-Comics
 
 A unified Next.js application combining gesture-controlled drawing with comic panel creation.
 

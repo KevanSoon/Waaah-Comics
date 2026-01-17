@@ -3,15 +3,18 @@
 import Link from 'next/link';
 import { Hand, LayoutGrid, Sparkles, ArrowRight, User } from 'lucide-react';
 import { useAuth, SignInButton } from '@clerk/nextjs';
+import BalloonBackground from '@/components/ui/balloons-pop-background';
 
 export default function Home() {
   const { isLoaded, isSignedIn } = useAuth();
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-full p-8">
+    <>
+      <BalloonBackground />
+      <div className="relative z-10 flex flex-col items-center justify-center min-h-full p-8">
       <div className="text-center mb-12">
         <h1 className="text-5xl font-bold mb-4 bg-gradient-to-r from-purple-400 via-pink-500 to-orange-400 bg-clip-text text-transparent">
-          PanelPop Studio
+            Waaah-Comics
         </h1>
         <p className="text-gray-400 text-xl max-w-2xl">
           Create stunning comics with gesture-controlled drawing and AI-powered image generation
@@ -68,6 +71,7 @@ export default function Home() {
         <Sparkles className="w-5 h-5" />
         <span>Powered by Google Gemini AI</span>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

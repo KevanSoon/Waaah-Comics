@@ -1,4 +1,4 @@
-# PanelPop Backend
+# Waaah-Comics Backend
 
 This FastAPI backend provides a single endpoint to upload comic panel images to Supabase Storage (`comics_bucket`).
 

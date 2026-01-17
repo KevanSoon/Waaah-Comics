@@ -33,7 +33,7 @@ settings = Settings()
 # Initialize Supabase client
 supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
-app = FastAPI(title="PanelPop Backend", version="0.1.0")
+app = FastAPI(title="Waaah-Comics Backend", version="0.1.0")
 
 # CORS
 allowed_origins: List[str] = [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
