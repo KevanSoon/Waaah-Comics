@@ -382,8 +382,16 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
                   <Grip className="w-3 h-3" /> {selectedPanelId ? 'Click to Place' : 'Drag or Click'}
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Show local userImages first, then storage images */}
-                  {[...userImages, ...imageAssets.map(a => a.url)].filter((v, i, arr) => arr.indexOf(v) === i).map((src, idx) => {
+                  {/* Show local userImages first, then storage images (excluding video files) */}
+                  {[...userImages, ...imageAssets.map(a => a.url)]
+                    .filter((v, i, arr) => arr.indexOf(v) === i)
+                    .filter((src) => {
+                      // Exclude video file extensions
+                      const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.wmv', '.flv'];
+                      const lowerSrc = src.toLowerCase();
+                      return !videoExtensions.some(ext => lowerSrc.includes(ext));
+                    })
+                    .map((src, idx) => {
                     const isPlaced = Object.values(placedImages).some(
                       (panelImage: any) => panelImage?.src === src
                     );
