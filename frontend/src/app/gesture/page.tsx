@@ -621,7 +621,7 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
           <p className="font-bold text-base mb-2">✋ Gesture Controls:</p>
           <ul className="list-disc pl-4 space-y-1">
             <li><span className="text-green-600 font-medium">☝️ Point</span> - Draw with brush</li>
-            <li><span className="text-blue-600 font-medium">🤏 Pinch</span> - Draw with brush</li>
+            {/* <li><span className="text-blue-600 font-medium">🤏 Pinch</span> - Draw with brush</li> */}
             <li><span className="text-red-600 font-medium">✊ Fist</span> - Erase</li>
             <li><span className="text-yellow-600 font-medium">🖐️ Palm</span> - Stop drawing</li>
             <li><span className="text-purple-600 font-medium">✌️ Peace</span> - Drag toolbar</li>
