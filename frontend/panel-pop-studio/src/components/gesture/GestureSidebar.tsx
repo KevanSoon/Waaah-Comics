@@ -10,7 +10,6 @@ import {
   Move,
   Maximize,
   Minimize,
-  Save,
   Download,
   Eye,
   EyeOff,
@@ -32,7 +31,6 @@ interface GestureSidebarProps {
   isCameraEnabled?: boolean;
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
-  onSaveDrawing?: () => void;
 }
 
 const DWELL_TIME_MS = 1500;
@@ -53,7 +51,6 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
   isCameraEnabled = true,
   onToggleFullscreen,
   isFullscreen = false,
-  onSaveDrawing,
 }) => {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -121,7 +118,6 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     { id: 'color-yellow', type: 'color', value: '#EAB308', icon: null, color: 'bg-yellow-500' },
     { id: 'tool-eraser', type: 'tool', value: ToolType.ERASER, icon: <Eraser size={24} />, label: 'Eraser' },
     { id: 'tool-brush', type: 'tool', value: ToolType.BRUSH, icon: <Palette size={24} />, label: 'Brush' },
-    { id: 'action-save', type: 'action', value: 'save', icon: <Save size={24} />, label: 'Save to Cloud' },
     { id: 'action-clear', type: 'action', value: 'clear', icon: <Trash2 size={24} />, label: 'Clear Canvas' },
     { id: 'action-screenshot', type: 'action', value: 'screenshot', icon: <Download size={24} />, label: 'Download PNG' },
     { id: 'action-camera', type: 'action', value: 'camera', icon: isCameraEnabled ? <Eye size={24} /> : <EyeOff size={24} />, label: isCameraEnabled ? 'Hide Preview' : 'Show Preview' },
@@ -141,7 +137,6 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     } else if (btn.type === 'action') {
       if (btn.value === 'ai') onGenerate();
       if (btn.value === 'screenshot') onScreenshot();
-      if (btn.value === 'save') onSaveDrawing?.();
       if (btn.value === 'camera') onToggleCamera?.();
       if (btn.value === 'fullscreen') onToggleFullscreen?.();
       if (btn.value === 'clear') {
@@ -150,7 +145,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
         setClearProgress(0);
       }
     }
-  }, [onColorSelect, onGenerate, onScreenshot, onToolSelect, onSaveDrawing, onToggleCamera, onToggleFullscreen]);
+  }, [onColorSelect, onGenerate, onScreenshot, onToolSelect, onToggleCamera, onToggleFullscreen]);
 
   // Execute the actual clear
   const executeClean = useCallback(() => {
@@ -347,7 +342,6 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     } else if (btn.type === 'action') {
       if (btn.value === 'ai') onGenerate();
       if (btn.value === 'screenshot') onScreenshot();
-      if (btn.value === 'save') onSaveDrawing?.();
       if (btn.value === 'camera') onToggleCamera?.();
       if (btn.value === 'fullscreen') onToggleFullscreen?.();
       if (btn.value === 'clear') {
@@ -356,7 +350,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
         setClearProgress(0);
       }
     }
-  }, [onColorSelect, onGenerate, onScreenshot, onToolSelect, onSaveDrawing, onToggleCamera, onToggleFullscreen]);
+  }, [onColorSelect, onGenerate, onScreenshot, onToolSelect, onToggleCamera, onToggleFullscreen]);
 
   if (position.x === -1) return null;
 
@@ -368,7 +362,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
         top: position.y,
         cursor: (isDragging || isGestureDragging) ? 'grabbing' : 'default'
       }}
-      className="fixed flex flex-row gap-1 bg-white/95 backdrop-blur-sm p-2 rounded-2xl shadow-xl z-40 border-2 border-gray-300"
+      className="fixed flex flex-row gap-1 bg-white/80 backdrop-blur-md p-2 rounded-2xl shadow-xl z-40 border-2 border-gray-200"
     >
       {/* Drag handle - positioned on the left */}
       <div
