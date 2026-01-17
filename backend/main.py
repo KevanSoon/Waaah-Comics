@@ -346,6 +346,33 @@ def list_user_images(
     return AssetListResponse(user_id=folder, bucket=bucket, items=items)
 
 
+@app.delete("/assets/storage")
+def delete_storage_asset(
+    path: str,
+    user_id: Optional[str] = None,
+):
+    """Delete an asset from Supabase Storage.
+
+    Query params:
+      - path: The full path to the asset (e.g., users/user_xxx/filename.png)
+      - user_id: The user ID (for authorization check)
+    """
+    bucket = "comics_bucket"
+    folder = _user_folder(user_id)
+
+    # Security check: ensure the path belongs to the user
+    expected_prefix = f"users/{folder}/"
+    if not path.startswith(expected_prefix):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this asset")
+
+    try:
+        # Delete from Supabase Storage
+        supabase.storage.from_(bucket).remove([path])
+        return {"status": "deleted", "path": path}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete asset: {e}")
+
+
 @app.get("/assets/user-videos", response_model=AssetListResponse)
 def list_user_videos(
     user_id: Optional[str] = None,

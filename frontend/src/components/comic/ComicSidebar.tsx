@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Layout, Image as ImageIcon, Sparkles, Upload, Loader2, Grip, Video, RefreshCw } from 'lucide-react';
+import { Layout, Image as ImageIcon, Sparkles, Upload, Loader2, Grip, Video, RefreshCw, X } from 'lucide-react';
 import { TabView, Template, Asset } from '@/types';
 import { TEMPLATES } from '@/types/constants';
 import { generateComicAsset } from '@/services/geminiService';
@@ -139,8 +139,10 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetSubTab, setAssetSubTab] = useState<AssetSubTab>('images');
-  const { assets, imageAssets, videoAssets, isLoading, addAsset, refreshAssets } = useAssets();
-  const { getToken, isSignedIn } = useAuth();
+  const { assets, imageAssets, videoAssets, isLoading, addAsset, deleteStorageAsset, refreshAssets } = useAssets();
+  const { getToken, isSignedIn, userId } = useAuth();
+  const [isUploading, setIsUploading] = useState(false);
+  const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
 
   // Initialize API service with auth token
   useEffect(() => {
@@ -157,19 +159,24 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
-      // Try to upload to backend if signed in
-      if (isSignedIn) {
+
+      // Upload to Supabase storage if signed in
+      if (isSignedIn && userId) {
+        setIsUploading(true);
         try {
-          const response = await apiService.uploadImage(file);
-          onUploadImage(response.url);
-          refreshAssets(); // Refresh to get from backend
+          const response = await apiService.uploadImageToStorage(file, userId);
+          if (response.public_url) {
+            onUploadImage(response.public_url);
+            refreshAssets(); // Refresh to get from backend
+          }
           return;
         } catch (err) {
-          console.error('Backend upload failed, using local:', err);
+          console.error('Supabase upload failed, using local:', err);
+        } finally {
+          setIsUploading(false);
         }
       }
-      
+
       // Fallback to local handling
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -180,6 +187,23 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
         }
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleDeleteAsset = async (asset: Asset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (!asset.id || deletingAssetId) return;
+
+    setDeletingAssetId(asset.id);
+    try {
+      const success = await deleteStorageAsset(asset.id);
+      if (!success) {
+        console.error('Failed to delete asset');
+      }
+    } finally {
+      setDeletingAssetId(null);
     }
   };
 
@@ -248,16 +272,6 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
           }`}
         >
           <ImageIcon className="w-4 h-4" /> Assets
-        </button>
-        <button
-          onClick={() => setActiveTab('ai')}
-          className={`flex-1 py-3 text-sm font-medium flex justify-center items-center gap-2 transition-colors ${
-            activeTab === 'ai'
-              ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50'
-              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-          }`}
-        >
-          <Sparkles className="w-4 h-4" /> AI Gen
         </button>
       </div>
 
@@ -359,12 +373,22 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
 
             {/* Upload section - only show for images sub-tab */}
             {assetSubTab === 'images' && (
-              <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center hover:bg-slate-100 transition-colors">
-                <label className="cursor-pointer flex flex-col items-center">
-                  <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                  <span className="text-sm font-medium text-slate-600">Upload Image</span>
-                  <span className="text-xs text-slate-400 mt-1">JPG, PNG supported</span>
-                  <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} />
+              <div className={`p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-slate-100'}`}>
+                <label className={`flex flex-col items-center ${isUploading ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                  {isUploading ? (
+                    <>
+                      <Loader2 className="w-8 h-8 text-blue-500 mb-2 animate-spin" />
+                      <span className="text-sm font-medium text-blue-600">Uploading...</span>
+                      <span className="text-xs text-slate-400 mt-1">Please wait</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                      <span className="text-sm font-medium text-slate-600">Upload Image</span>
+                      <span className="text-xs text-slate-400 mt-1">JPG, PNG supported</span>
+                    </>
+                  )}
+                  <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading} />
                 </label>
               </div>
             )}
@@ -382,51 +406,107 @@ export const ComicSidebar: React.FC<ComicSidebarProps> = ({
                   <Grip className="w-3 h-3" /> {selectedPanelId ? 'Click to Place' : 'Drag or Click'}
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {/* Show local userImages first, then storage images (excluding video files) */}
-                  {[...userImages, ...imageAssets.map(a => a.url)]
-                    .filter((v, i, arr) => arr.indexOf(v) === i)
+                  {/* Show local userImages first */}
+                  {userImages
                     .filter((src) => {
-                      // Exclude video file extensions
                       const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.wmv', '.flv'];
                       const lowerSrc = src.toLowerCase();
                       return !videoExtensions.some(ext => lowerSrc.includes(ext));
                     })
                     .map((src, idx) => {
-                    const isPlaced = Object.values(placedImages).some(
-                      (panelImage: any) => panelImage?.src === src
-                    );
+                      const isPlaced = Object.values(placedImages).some(
+                        (panelImage: any) => panelImage?.src === src
+                      );
 
-                    return (
-                      <div
-                        key={idx}
-                        className={`aspect-square bg-slate-100 rounded-lg overflow-hidden border-2 transition-all relative group ${
-                          selectedPanelId
-                            ? 'cursor-pointer hover:border-blue-500 hover:shadow-lg hover:scale-105'
-                            : isPlaced
-                              ? 'border-green-500 cursor-grab active:cursor-grabbing opacity-75'
-                              : 'border-slate-200 cursor-grab active:cursor-grabbing hover:shadow-md'
-                        } ${selectedPanelId && !isPlaced ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
-                        draggable={!selectedPanelId}
-                        onClick={() => {
-                          if (selectedPanelId && onImageClick) {
-                            onImageClick(src);
-                          }
-                        }}
-                        onDragStart={(e) => {
-                          if (selectedPanelId) {
-                            e.preventDefault();
-                            return;
-                          }
-                          console.log('[DragStart] Starting drag with src:', src);
-                          e.dataTransfer.setData('image-src', src);
-                          e.dataTransfer.effectAllowed = 'copy';
-                          console.log('[DragStart] Data set successfully');
-                        }}
-                      >
-                        <ImageWithAspectRatio src={src} isPlaced={isPlaced} />
-                      </div>
-                    );
-                  })}
+                      return (
+                        <div
+                          key={`local-${idx}`}
+                          className={`aspect-square bg-slate-100 rounded-lg overflow-hidden border-2 transition-all relative group ${
+                            selectedPanelId
+                              ? 'cursor-pointer hover:border-blue-500 hover:shadow-lg hover:scale-105'
+                              : isPlaced
+                                ? 'border-green-500 cursor-grab active:cursor-grabbing opacity-75'
+                                : 'border-slate-200 cursor-grab active:cursor-grabbing hover:shadow-md'
+                          } ${selectedPanelId && !isPlaced ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
+                          draggable={!selectedPanelId}
+                          onClick={() => {
+                            if (selectedPanelId && onImageClick) {
+                              onImageClick(src);
+                            }
+                          }}
+                          onDragStart={(e) => {
+                            if (selectedPanelId) {
+                              e.preventDefault();
+                              return;
+                            }
+                            e.dataTransfer.setData('image-src', src);
+                            e.dataTransfer.effectAllowed = 'copy';
+                          }}
+                        >
+                          <ImageWithAspectRatio src={src} isPlaced={isPlaced} />
+                        </div>
+                      );
+                    })}
+                  {/* Storage images with delete option */}
+                  {imageAssets
+                    .filter((asset) => {
+                      const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v', '.wmv', '.flv'];
+                      const lowerUrl = asset.url.toLowerCase();
+                      return !videoExtensions.some(ext => lowerUrl.includes(ext));
+                    })
+                    .filter((asset) => !userImages.includes(asset.url))
+                    .map((asset, idx) => {
+                      const isPlaced = Object.values(placedImages).some(
+                        (panelImage: any) => panelImage?.src === asset.url
+                      );
+                      const isDeleting = deletingAssetId === asset.id;
+
+                      return (
+                        <div
+                          key={`storage-${idx}`}
+                          className={`aspect-square bg-slate-100 rounded-lg overflow-hidden border-2 transition-all relative group ${
+                            selectedPanelId
+                              ? 'cursor-pointer hover:border-blue-500 hover:shadow-lg hover:scale-105'
+                              : isPlaced
+                                ? 'border-green-500 cursor-grab active:cursor-grabbing opacity-75'
+                                : 'border-slate-200 cursor-grab active:cursor-grabbing hover:shadow-md'
+                          } ${selectedPanelId && !isPlaced ? 'border-blue-300 ring-2 ring-blue-100' : ''}`}
+                          draggable={!selectedPanelId && !isDeleting}
+                          onClick={() => {
+                            if (selectedPanelId && onImageClick) {
+                              onImageClick(asset.url);
+                            }
+                          }}
+                          onDragStart={(e) => {
+                            if (selectedPanelId || isDeleting) {
+                              e.preventDefault();
+                              return;
+                            }
+                            e.dataTransfer.setData('image-src', asset.url);
+                            e.dataTransfer.effectAllowed = 'copy';
+                          }}
+                        >
+                          <ImageWithAspectRatio src={asset.url} isPlaced={isPlaced} />
+                          {/* Delete button - top right corner */}
+                          <button
+                            onClick={(e) => handleDeleteAsset(asset, e)}
+                            disabled={isDeleting}
+                            className={`absolute top-1 right-1 p-1.5 rounded-full transition-all ${
+                              isDeleting
+                                ? 'bg-red-500 text-white'
+                                : 'bg-red-500/80 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600'
+                            }`}
+                            title="Delete from storage"
+                          >
+                            {isDeleting ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <X className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
                   {userImages.length === 0 && imageAssets.length === 0 && (
                     <div className="col-span-2 py-8 text-center text-slate-400 text-sm italic">
                       {isLoading ? 'Loading images...' : 'No images yet. Upload or generate some!'}

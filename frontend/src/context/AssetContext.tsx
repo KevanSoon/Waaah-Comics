@@ -12,6 +12,7 @@ interface AssetContextType {
   isLoading: boolean;
   addAsset: (url: string, name: string, source: Asset['source'], type?: Asset['type']) => Promise<void>;
   removeAsset: (id: string) => Promise<void>;
+  deleteStorageAsset: (path: string) => Promise<boolean>;
   clearAssets: () => void;
   refreshAssets: () => Promise<void>;
 }
@@ -114,12 +115,28 @@ export function AssetProvider({ children }: { children: ReactNode }) {
     setAssets([]);
   }, []);
 
+  const deleteStorageAsset = useCallback(async (path: string): Promise<boolean> => {
+    if (!isSignedIn || !userId) {
+      return false;
+    }
+
+    try {
+      await apiService.deleteStorageAsset(path, userId);
+      // Remove from local state
+      setAssets((prev) => prev.filter((asset) => asset.id !== path));
+      return true;
+    } catch (error) {
+      console.error('Failed to delete storage asset:', error);
+      return false;
+    }
+  }, [isSignedIn, userId]);
+
   // Derived state for filtered assets
   const imageAssets = assets.filter((a) => a.type === 'image');
   const videoAssets = assets.filter((a) => a.type === 'video');
 
   return (
-    <AssetContext.Provider value={{ assets, imageAssets, videoAssets, isLoading, addAsset, removeAsset, clearAssets, refreshAssets }}>
+    <AssetContext.Provider value={{ assets, imageAssets, videoAssets, isLoading, addAsset, removeAsset, deleteStorageAsset, clearAssets, refreshAssets }}>
       {children}
     </AssetContext.Provider>
   );

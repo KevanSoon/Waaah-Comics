@@ -236,6 +236,38 @@ class ApiService {
     return this.request(`/assets/user-videos?${params.toString()}`);
   }
 
+  async deleteStorageAsset(path: string, userId: string): Promise<{ status: string; path: string }> {
+    const params = new URLSearchParams({ path, user_id: userId });
+    return this.request(`/assets/storage?${params.toString()}`, { method: 'DELETE' });
+  }
+
+  async uploadImageToStorage(file: File, userId: string): Promise<{ bucket: string; path: string; public_url: string | null }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_id', userId);
+
+    const headers = new Headers();
+    if (this.getAuthHeader) {
+      const token = await this.getAuthHeader();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+    }
+
+    const response = await fetch(`${API_BASE_URL}/comics/upload-panel`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(error.detail || 'Upload failed');
+    }
+
+    return response.json();
+  }
+
   // Project endpoints
   async listProjects(userId: string): Promise<Project[]> {
     return this.request(`/projects?user_id=${userId}`);
