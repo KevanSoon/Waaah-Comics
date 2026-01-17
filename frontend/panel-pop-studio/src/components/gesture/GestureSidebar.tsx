@@ -14,12 +14,13 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
-import { ToolType, Point, DrawingConfig } from '@/types';
+import { ToolType, Point, DrawingConfig, GestureType } from '@/types';
 
 interface GestureSidebarProps {
   cursor: Point;
   currentConfig: DrawingConfig;
   isPinching: boolean;
+  gesture: GestureType;
   onToolSelect: (tool: ToolType) => void;
   onColorSelect: (color: string) => void;
   onGenerate: () => void;
@@ -40,6 +41,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
   cursor,
   currentConfig,
   isPinching,
+  gesture,
   onToolSelect,
   onColorSelect,
   onGenerate,
@@ -228,7 +230,9 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     };
   }, [isDragging]);
 
-  // Gesture-based dragging (pinch on drag handle)
+  // Gesture-based dragging (VICTORY/peace sign on drag handle)
+  const isVictoryGesture = gesture === GestureType.VICTORY;
+  
   useEffect(() => {
     if (!dragHandleRef.current) return;
 
@@ -239,7 +243,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
       cursor.y >= handleRect.top &&
       cursor.y <= handleRect.bottom;
 
-    if (isPinching && isOverDragHandle) {
+    if (isVictoryGesture && isOverDragHandle) {
       if (!isGestureDragging) {
         // Start gesture dragging
         setIsGestureDragging(true);
@@ -248,23 +252,28 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
           y: cursor.y - position.y
         };
       }
-    } else if (!isPinching && isGestureDragging) {
+    } else if (!isVictoryGesture && isGestureDragging) {
       // Stop gesture dragging
       setIsGestureDragging(false);
     }
 
     // Update position while gesture dragging
-    if (isGestureDragging && isPinching) {
+    if (isGestureDragging && isVictoryGesture) {
       setPosition({
         x: cursor.x - dragOffsetRef.current.x,
         y: cursor.y - dragOffsetRef.current.y
       });
     }
-  }, [cursor.x, cursor.y, isPinching, isGestureDragging, position.x, position.y]);
+  }, [cursor.x, cursor.y, isVictoryGesture, isGestureDragging, position.x, position.y]);
 
   // Gesture-based dwell detection
   useEffect(() => {
-    if (isDragging) return;
+    // Don't detect dwell during any dragging or when making VICTORY gesture (used for panel drag)
+    if (isDragging || isGestureDragging || isVictoryGesture) {
+      setHoveredId(null);
+      setProgress(0);
+      return;
+    }
 
     const element = document.elementFromPoint(cursor.x, cursor.y);
     const button = element?.closest('[data-dwell-target]');
@@ -292,10 +301,10 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
         }
       }
     }
-  }, [cursor.x, cursor.y, hoveredId, isDragging]);
+  }, [cursor.x, cursor.y, hoveredId, isDragging, isGestureDragging, isVictoryGesture]);
 
   useEffect(() => {
-    if (!hoveredId || isDragging) {
+    if (!hoveredId || isDragging || isGestureDragging || isVictoryGesture) {
       setProgress(0);
       return;
     }
@@ -330,7 +339,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
     return () => {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
-  }, [hoveredId, isDragging, triggerAction]);
+  }, [hoveredId, isDragging, isGestureDragging, isVictoryGesture, triggerAction]);
 
   // Handle click for mouse users
   const handleButtonClick = useCallback((btn: typeof buttons[0]) => {
