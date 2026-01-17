@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # Ignore extra env vars (e.g., Clerk/Google) to avoid validation errors
     model_config = SettingsConfigDict(
-        env_file=".env.local",
+        env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -56,6 +56,12 @@ def _validate_image(file: UploadFile) -> None:
     allowed_types = {"image/png", "image/jpeg", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=400, detail=f"Unsupported content type: {file.content_type}")
+
+
+def _validate_video(file: UploadFile) -> None:
+    allowed_types = {"video/mp4", "video/webm", "video/quicktime"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported video type: {file.content_type}. Allowed: mp4, webm, mov")
 
 
 def _build_storage_path(
@@ -129,6 +135,64 @@ async def upload_comic_panel(
         raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
 
     # Get public URL (works if bucket/object policy allows public read)
+    public_url = None
+    try:
+        public_url = supabase.storage.from_(bucket).get_public_url(path)
+    except Exception:
+        public_url = None
+
+    return UploadResponse(bucket=bucket, path=path, public_url=public_url)
+
+
+@app.post("/comics/upload-video", response_model=UploadResponse)
+async def upload_comic_video(
+    file: UploadFile = File(...),
+    user_id: Optional[str] = Form(default=None),
+    comic_id: Optional[str] = Form(default=None),
+    panel_id: Optional[str] = Form(default=None),
+):
+    """Upload an AI-generated video to Supabase Storage (comics_bucket).
+
+    Accepts multipart/form-data with fields:
+      - file: the video (mp4/webm/mov)
+      - user_id (optional)
+      - comic_id (optional)
+      - panel_id (optional)
+    """
+
+    if not file:
+        raise HTTPException(status_code=400, detail="Missing file upload")
+
+    _validate_video(file)
+
+    # Read video bytes
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file upload")
+
+    # Build path
+    path = _build_storage_path(
+        user_id=user_id,
+        filename=file.filename or "video.mp4",
+    )
+
+    bucket = "comics_bucket"
+
+    # Upload to Supabase Storage
+    try:
+        supabase.storage.from_(bucket).upload(
+            path=path,
+            file=data,
+            file_options={
+                "contentType": (file.content_type or "video/mp4"),
+                "upsert": "true",
+                "cacheControl": "3600",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+
+    # Get public URL
     public_url = None
     try:
         public_url = supabase.storage.from_(bucket).get_public_url(path)

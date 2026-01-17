@@ -796,6 +796,7 @@ function ComicStudioContent() {
         progress={videoProgress}
         error={videoError}
         onRetry={handleRetryVideo}
+        userId={userId ?? undefined}
       />
     </div>
   );
