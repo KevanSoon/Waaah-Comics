@@ -105,7 +105,7 @@ export const GestureSidebar: React.FC<GestureSidebarProps> = ({
   useEffect(() => {
     if (position.x === -1) {
       setPosition({
-        x: window.innerWidth - 180,
+        x: window.innerWidth - 200,
         y: 80 // Position below navbar with some padding
       });
     }

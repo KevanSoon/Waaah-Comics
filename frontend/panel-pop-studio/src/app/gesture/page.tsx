@@ -76,7 +76,7 @@ export default function GestureCanvasPage() {
 }
 
 function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
-  const { videoRef, cursor, isPinching, gesture, isLoading, cameraError } = useHandTracking();
+  const { videoRef, cursor, isPinching, gesture, isLoading, cameraError, rawHandPosition, gestureBox } = useHandTracking();
   const { addAsset, refreshAssets } = useAssets();
   const { getToken, userId, isSignedIn } = useAuth();
 
@@ -470,18 +470,51 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
 
   return (
     <div ref={containerRef} className="relative w-full h-full overflow-hidden bg-white selection:bg-none">
-      {/* Camera feed - positioned below navbar */}
-      <video
-        ref={videoRef}
-        className={`absolute top-2 left-4 w-40 rounded-lg border-2 border-gray-200 pointer-events-none -scale-x-100 z-10 transition-opacity ${isCameraEnabled ? 'opacity-70' : 'opacity-0'}`}
-        autoPlay
-        muted
-        playsInline
-      />
+      {/* Camera feed with gesture box overlay - positioned below navbar */}
+      <div className={`absolute top-2 left-4 w-48 z-10 transition-opacity ${isCameraEnabled ? 'opacity-90' : 'opacity-0'}`}>
+        <div className="relative">
+          <video
+            ref={videoRef}
+            className="w-full rounded-lg border-2 border-gray-300 pointer-events-none -scale-x-100"
+            autoPlay
+            muted
+            playsInline
+          />
+          {/* Gesture Box Overlay - shows the active tracking region */}
+          {gestureBox && (
+            <div 
+              className="absolute border-2 border-green-500 bg-green-500/10 rounded pointer-events-none"
+              style={{
+                // Mirror the box since video is mirrored (-scale-x-100)
+                left: `${(1 - gestureBox.x - gestureBox.width) * 100}%`,
+                top: `${gestureBox.y * 100}%`,
+                width: `${gestureBox.width * 100}%`,
+                height: `${gestureBox.height * 100}%`,
+              }}
+            >
+              <span className="absolute -top-5 left-0 text-xs text-green-600 font-medium bg-white/80 px-1 rounded">
+                Draw Zone
+              </span>
+            </div>
+          )}
+          {/* Hand position indicator inside camera view */}
+          {rawHandPosition && (
+            <div 
+              className="absolute w-3 h-3 bg-red-500 rounded-full border-2 border-white pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+              style={{
+                // Mirror the position since video is mirrored
+                left: `${(1 - rawHandPosition.x) * 100}%`,
+                top: `${rawHandPosition.y * 100}%`,
+              }}
+            />
+          )}
+        </div>
+        <p className="text-xs text-gray-500 text-center mt-1">Keep hand in green zone</p>
+      </div>
 
       <CanvasBoard
         cursor={cursor}
-        isPinching={isPinching}
+        gesture={gesture}
         config={drawingConfig}
         useMouseInput={true}
         disableDrawing={isSidebarDragging}
@@ -514,19 +547,20 @@ function GestureCanvasContent({ useHandTracking }: { useHandTracking: any }) {
         </div>
       )}
 
-      {/* Controls Panel - Bottom Left */}
-      <div className="fixed bottom-8 left-8 flex flex-col gap-3 z-30">
+      {/* Controls Panel - Bottom Right (moved from left to avoid sidebar) */}
+      <div className="fixed bottom-8 right-8 flex flex-col gap-3 z-30">
         {/* Instructions */}
-        <div className="bg-white/90 backdrop-blur p-4 rounded-xl border-2 border-gray-300 shadow-lg text-sm text-gray-700 max-w-sm">
-          <p className="font-bold text-base mb-2">Controls:</p>
+        <div className="bg-white/90 backdrop-blur p-4 rounded-xl border-2 border-gray-300 shadow-lg text-sm text-gray-700 max-w-xs">
+          <p className="font-bold text-base mb-2">✋ Gesture Drawing:</p>
           <ul className="list-disc pl-4 space-y-1">
-            <li>Click and drag to draw (mouse)</li>
-            <li>Pinch to draw (gesture)</li>
-            <li>Click or hover over tools to select</li>
-            <li><kbd className="px-1 bg-gray-200 rounded">B</kbd> Brush, <kbd className="px-1 bg-gray-200 rounded">E</kbd> Eraser</li>
-            <li><kbd className="px-1 bg-gray-200 rounded">C</kbd> or <kbd className="px-1 bg-gray-200 rounded">Delete</kbd> Clear</li>
-            <li><kbd className="px-1 bg-gray-200 rounded">1-5</kbd> Colors</li>
+            <li><span className="text-green-600 font-medium">☝️ Point</span> - Draw with brush</li>
+            <li><span className="text-blue-600 font-medium">🤏 Pinch</span> - Draw with brush</li>
+            <li><span className="text-red-600 font-medium">✊ Fist</span> - Erase</li>
+            <li><span className="text-yellow-600 font-medium">🖐️ Palm</span> - Stop drawing</li>
           </ul>
+          <p className="text-xs text-gray-500 mt-2 italic">
+            💡 Keep hand in the green "Draw Zone" shown in camera preview
+          </p>
         </div>
 
         {/* Voice Prompt Button */}

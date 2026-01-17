@@ -4,15 +4,27 @@ export type Point = {
   y: number;
 };
 
+// Gesture box defines the active region in normalized camera coordinates (0-1)
+// Hand position within this box maps to the full canvas
+export interface GestureBox {
+  x: number;      // Left edge (0-1, where 0 is left of camera view)
+  y: number;      // Top edge (0-1, where 0 is top of camera view)
+  width: number;  // Width (0-1)
+  height: number; // Height (0-1)
+}
+
 export enum GestureType {
   NONE = 'NONE',
-  PINCH = 'PINCH',
-  OPEN_PALM = 'OPEN_PALM',
-  CLOSED_FIST = 'CLOSED_FIST',
+  POINTER = 'POINTER',       // Index extended only - for drawing
+  PINCH = 'PINCH',           // Thumb + Index close - for selection
+  OPEN_PALM = 'OPEN_PALM',   // All 5 fingers extended - for navigation/panning
+  VICTORY = 'VICTORY',       // Index + Middle extended - for tool swap
+  CLOSED_FIST = 'CLOSED_FIST', // All fingers folded - for eraser/undo
 }
 
 export type HandTrackerState = {
-  cursor: Point;
+  cursor: Point;           // Mapped cursor position on screen
+  rawHandPosition: Point;  // Raw normalized hand position (0-1) for gesture box visualization
   gesture: GestureType;
   isPinching: boolean;
   isLoading: boolean;
