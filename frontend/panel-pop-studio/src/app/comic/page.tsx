@@ -10,6 +10,7 @@ import { ComicState, PanelImageState, TabView, Template, ComicStrip, MultiStripV
 import { useAuth } from '@clerk/nextjs';
 import { apiService, Comic, Project } from '@/services/apiService';
 import ProtectedRoute from '@/components/shared/ProtectedRoute';
+import { useProjects } from '@/context/ProjectsContext';
 
 import { VideoModal } from '@/components/comic/VideoModal';
 import { MultiStripVideoModal } from '@/components/comic/MultiStripVideoModal';
@@ -68,9 +69,14 @@ function ComicStudioContent() {
   const [currentComicId, setCurrentComicId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Project state
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  // Get projects from shared context
+  const { 
+    projects, 
+    selectedProjectId, 
+    setSelectedProjectId, 
+    createProject,
+    refreshProjects 
+  } = useProjects();
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const [showCreateProjectModal, setShowCreateProjectModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -117,24 +123,20 @@ function ComicStudioContent() {
     apiService.setAuthGetter(getToken);
   }, [getToken]);
 
-  // Load user's saved comics and projects
+  // Load user's saved comics
   useEffect(() => {
-    async function loadUserData() {
-      if (isSignedIn && userId) {
+    async function loadComics() {
+      if (isSignedIn) {
         try {
-          const [comics, projectsData] = await Promise.all([
-            apiService.getUserComics(),
-            apiService.listProjects(userId),
-          ]);
+          const comics = await apiService.getUserComics();
           setSavedComics(comics);
-          setProjects(projectsData);
         } catch (error) {
-          console.error('Failed to load user data:', error);
+          console.error('Failed to load comics:', error);
         }
       }
     }
-    loadUserData();
-  }, [isSignedIn, userId]);
+    loadComics();
+  }, [isSignedIn]);
 
   // Sync assets to userImages
   useEffect(() => {
@@ -470,21 +472,8 @@ function ComicStudioContent() {
           image_url: publicUrl,
         });
 
-        // Update local project state
-        setProjects(prev => prev.map(p => {
-          if (p.id === selectedProjectId) {
-            return {
-              ...p,
-              panels: [...p.panels, {
-                id: `temp-${Date.now()}`,
-                project_id: selectedProjectId,
-                image_url: publicUrl,
-                panel_order: p.panels.length,
-              }],
-            };
-          }
-          return p;
-        }));
+        // Refresh projects from context to get updated panel list
+        await refreshProjects();
       }
 
       // Add to user images if public URL is available; otherwise keep local data URL
@@ -504,14 +493,14 @@ function ComicStudioContent() {
   };
 
   const handleCreateProject = async () => {
-    if (!userId || !newProjectName.trim()) return;
+    if (!newProjectName.trim()) return;
 
     setIsCreatingProject(true);
     try {
-      const project = await apiService.createProject(userId, {
-        name: newProjectName.trim(),
-      });
-      setProjects(prev => [project, ...prev]);
+      const project = await createProject(
+        newProjectName.trim(),
+        undefined
+      );
       setSelectedProjectId(project.id);
       setShowCreateProjectModal(false);
       setNewProjectName('');

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import ProtectedRoute from '@/components/shared/ProtectedRoute';
 import { useAuth } from '@clerk/nextjs';
 import { apiService, Project } from '@/services/apiService';
+import { useProjects } from '@/context/ProjectsContext';
 
 export default function ProjectsPage() {
   return (
@@ -16,51 +17,28 @@ export default function ProjectsPage() {
 }
 
 function ProjectsContent() {
-  const { userId, getToken } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { userId } = useAuth();
+  const { 
+    projects, 
+    isLoading, 
+    refreshProjects, 
+    createProject: createProjectContext,
+    deleteProject: deleteProjectContext 
+  } = useProjects();
   const [isCreating, setIsCreating] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
 
-  // Initialize API service with auth token
-  useEffect(() => {
-    apiService.setAuthGetter(getToken);
-  }, [getToken]);
-
-  const loadProjects = useCallback(async () => {
-    if (!userId) {
-      setProjects([]);
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const data = await apiService.listProjects(userId);
-      setProjects(data);
-    } catch (err) {
-      console.error('Failed to load projects:', err);
-      setProjects([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
-
   const handleCreateProject = async () => {
-    if (!userId || !newProjectName.trim()) return;
+    if (!newProjectName.trim()) return;
 
     setIsCreating(true);
     try {
-      const project = await apiService.createProject(userId, {
-        name: newProjectName.trim(),
-        description: newProjectDescription.trim() || undefined,
-      });
-      setProjects(prev => [project, ...prev]);
+      await createProjectContext(
+        newProjectName.trim(),
+        newProjectDescription.trim() || undefined
+      );
       setShowCreateModal(false);
       setNewProjectName('');
       setNewProjectDescription('');
@@ -76,14 +54,12 @@ function ProjectsContent() {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!userId) return;
     if (!window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
       return;
     }
 
     try {
-      await apiService.deleteProject(projectId, userId);
-      setProjects(prev => prev.filter(p => p.id !== projectId));
+      await deleteProjectContext(projectId);
     } catch (err) {
       console.error('Failed to delete project:', err);
       alert('Failed to delete project. Please try again.');
@@ -102,7 +78,7 @@ function ProjectsContent() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={loadProjects}
+              onClick={refreshProjects}
               disabled={isLoading}
               className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
             >
